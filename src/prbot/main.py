@@ -86,6 +86,7 @@ handle_github_webhook = HandleGitHubWebhook(
 reconcile_tracked_prs = ReconcileTrackedPRs(
     pr_repository=pr_repository,
     handle_webhook=handle_github_webhook,
+    window_days=settings.reconcile_window_days,
 )
 manage_user_exclusions = ManageUserExclusions(
     exclusion_repo=user_exclusion_repo,

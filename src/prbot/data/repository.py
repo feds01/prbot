@@ -59,13 +59,30 @@ class SQLitePRRepository:
             rows = result.scalars().all()
             return [_row_to_entity(row) for row in rows]
 
-    async def find_distinct_pr_urls(self) -> Sequence[PRUrl]:
+    async def find_distinct_pr_urls(self, since: str | None = None) -> Sequence[PRUrl]:
+        """Distinct tracked PRs, most recently active first.
+
+        Order is part of the contract: reconciliation runs against a finite
+        GitHub budget, so when it runs short it should run short on the oldest
+        PRs rather than the ones people are still watching.
+        """
         async with self._session_factory() as session:
-            stmt = select(
-                TrackedPRRow.owner,
-                TrackedPRRow.repo,
-                TrackedPRRow.pr_number,
-            ).distinct()
+            last_activity = func.max(TrackedPRRow.updated_at)
+            stmt = (
+                select(
+                    TrackedPRRow.owner,
+                    TrackedPRRow.repo,
+                    TrackedPRRow.pr_number,
+                )
+                .group_by(
+                    TrackedPRRow.owner,
+                    TrackedPRRow.repo,
+                    TrackedPRRow.pr_number,
+                )
+                .order_by(last_activity.desc())
+            )
+            if since is not None:
+                stmt = stmt.having(last_activity >= since)
             result = await session.execute(stmt)
             return [
                 PRUrl(owner=row.owner, repo=row.repo, number=row.pr_number) for row in result.all()

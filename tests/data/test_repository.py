@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from prbot.data.database import Base
@@ -178,3 +179,62 @@ class TestSQLiteChannelCursorRepository:
 
         # Original cursor should be unchanged
         assert await cursor_repository.get_cursor("slack", "C1") == "500.000000"
+
+
+async def _set_activity(session_factory: async_sessionmaker, number: int, stamp: str) -> None:
+    """Rewrite a row's server-set updated_at so ordering can be asserted."""
+    async with session_factory() as session:
+        await session.execute(
+            text("UPDATE tracked_prs SET updated_at = :stamp WHERE pr_number = :number"),
+            {"stamp": stamp, "number": number},
+        )
+        await session.commit()
+
+
+class TestDistinctPRUrlOrdering:
+    async def test_orders_by_most_recent_activity(
+        self, repository: SQLitePRRepository, session_factory: async_sessionmaker
+    ) -> None:
+        await repository.save(_tracked(number=1, channel="C1", ts="1.0"))
+        await repository.save(_tracked(number=2, channel="C2", ts="2.0"))
+        await repository.save(_tracked(number=3, channel="C3", ts="3.0"))
+        await _set_activity(session_factory, 1, "2020-01-01 00:00:00")
+        await _set_activity(session_factory, 2, "2026-09-18 00:00:00")
+        await _set_activity(session_factory, 3, "2024-06-01 00:00:00")
+
+        results = await repository.find_distinct_pr_urls()
+
+        assert [r.number for r in results] == [2, 3, 1]
+
+    async def test_since_excludes_stale_prs(
+        self, repository: SQLitePRRepository, session_factory: async_sessionmaker
+    ) -> None:
+        await repository.save(_tracked(number=1, channel="C1", ts="1.0"))
+        await repository.save(_tracked(number=2, channel="C2", ts="2.0"))
+        await _set_activity(session_factory, 1, "2020-01-01 00:00:00")
+        await _set_activity(session_factory, 2, "2026-09-18 00:00:00")
+
+        results = await repository.find_distinct_pr_urls(since="2026-09-01 00:00:00")
+
+        assert [r.number for r in results] == [2]
+
+    async def test_a_pr_is_as_recent_as_its_newest_message(
+        self, repository: SQLitePRRepository, session_factory: async_sessionmaker
+    ) -> None:
+        # One PR tracked twice: the stale copy must not drag it out of the window.
+        await repository.save(_tracked(number=1, channel="C1", ts="1.0"))
+        await repository.save(_tracked(number=1, channel="C2", ts="2.0"))
+        async with session_factory() as session:
+            await session.execute(
+                text("UPDATE tracked_prs SET updated_at = :s WHERE message_ref LIKE :ref"),
+                {"s": "2020-01-01 00:00:00", "ref": "C1%"},
+            )
+            await session.execute(
+                text("UPDATE tracked_prs SET updated_at = :s WHERE message_ref LIKE :ref"),
+                {"s": "2026-09-18 00:00:00", "ref": "C2%"},
+            )
+            await session.commit()
+
+        results = await repository.find_distinct_pr_urls(since="2026-09-01 00:00:00")
+
+        assert [r.number for r in results] == [1]

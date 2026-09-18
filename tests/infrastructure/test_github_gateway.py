@@ -6,6 +6,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from httpx import Response
 
+from prbot.domain.tracking.ports import SourceRateLimitError
 from prbot.domain.tracking.value_objects import PRUrl, ReviewState
 from prbot.infrastructure.github_gateway import GitHubGateway
 
@@ -27,12 +28,12 @@ def gateway() -> GitHubGateway:
     return GitHubGateway(app_id="12345", private_key=TEST_PRIVATE_KEY)
 
 
-def _mock_installation_and_token() -> None:
-    """Set up mocks for the GitHub App auth flow."""
+def _mock_installation_and_token() -> respx.Route:
+    """Set up mocks for the GitHub App auth flow, returning the token route."""
     respx.get("https://api.github.com/orgs/octocat/installation").mock(
         return_value=Response(200, json={"id": 99})
     )
-    respx.post("https://api.github.com/app/installations/99/access_tokens").mock(
+    return respx.post("https://api.github.com/app/installations/99/access_tokens").mock(
         return_value=Response(
             201,
             json={
@@ -271,3 +272,62 @@ class TestFetchCiFailing:
         info = await gateway.fetch_pr_info(pr_url)
 
         assert info.ci_failing is True
+
+
+class TestRateLimitHandling:
+    @respx.mock
+    async def test_exhausted_budget_raises_rather_than_returning(
+        self, gateway: GitHubGateway, pr_url: PRUrl
+    ) -> None:
+        _mock_installation_and_token()
+        respx.get("https://api.github.com/repos/octocat/hello/pulls/1").mock(
+            return_value=Response(
+                403,
+                headers={"x-ratelimit-remaining": "0", "x-ratelimit-reset": "1789725110"},
+                json={"message": "API rate limit exceeded for installation ID 1"},
+            )
+        )
+
+        with pytest.raises(SourceRateLimitError) as excinfo:
+            await gateway.fetch_pr_info(pr_url)
+
+        assert excinfo.value.reset_at == 1789725110.0
+
+    @respx.mock
+    async def test_exhausted_budget_does_not_mint_a_second_token(
+        self, gateway: GitHubGateway, pr_url: PRUrl
+    ) -> None:
+        token_route = _mock_installation_and_token()
+        respx.get("https://api.github.com/repos/octocat/hello/pulls/1").mock(
+            return_value=Response(
+                403,
+                headers={"x-ratelimit-remaining": "0"},
+                json={"message": "API rate limit exceeded for installation ID 1"},
+            )
+        )
+
+        with pytest.raises(SourceRateLimitError):
+            await gateway.fetch_pr_info(pr_url)
+
+        # The budget belongs to the installation, so a fresh token cannot help.
+        assert token_route.call_count == 1
+
+    @respx.mock
+    async def test_rejected_token_is_reminted_once(
+        self, gateway: GitHubGateway, pr_url: PRUrl
+    ) -> None:
+        token_route = _mock_installation_and_token()
+        respx.get("https://api.github.com/repos/octocat/hello/pulls/1").mock(
+            side_effect=[
+                Response(401, json={"message": "Bad credentials"}),
+                Response(200, json={"state": "open", "merged": False, "user": {"login": "o"}}),
+            ]
+        )
+        respx.get("https://api.github.com/repos/octocat/hello/pulls/1/reviews").mock(
+            return_value=Response(200, json=[])
+        )
+
+        info = await gateway.fetch_pr_info(pr_url)
+
+        assert info.state == "open"
+        assert token_route.call_count == 2

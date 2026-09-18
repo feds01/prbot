@@ -7,6 +7,7 @@ import httpx
 import jwt
 
 from prbot.domain.exclusions.ports import GitHubUserKind, GitHubUserRef
+from prbot.domain.tracking.ports import SourceRateLimitError
 from prbot.domain.tracking.status_resolver import resolve_ci_failing
 from prbot.domain.tracking.value_objects import CheckRun, PRInfo, PRUrl, Review, ReviewState
 
@@ -19,7 +20,36 @@ _USER_TYPE_TO_KIND: dict[str, GitHubUserKind] = {
 
 _GITHUB_PR_PATTERN = re.compile(r"github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)")
 
+# GitHub's permanent answer when the App simply lacks a permission; re-minting
+# the token cannot change it, so it is not worth a retry.
+_PERMISSION_DENIED = "Resource not accessible by integration"
+
 logger = logging.getLogger(__name__)
+
+
+def _is_rate_limited(resp: httpx.Response) -> bool:
+    """GitHub answers 403 — not 429 — once the hourly budget is spent."""
+    return resp.status_code == 403 and resp.headers.get("x-ratelimit-remaining") == "0"
+
+
+def _reset_at(resp: httpx.Response) -> float | None:
+    try:
+        return float(resp.headers["x-ratelimit-reset"])
+    except KeyError, ValueError:
+        return None
+
+
+def _looks_like_bad_credentials(resp: httpx.Response) -> bool:
+    """Whether a fresh installation token might succeed where this one failed.
+
+    A rate-limit 403 must not qualify: the budget belongs to the installation,
+    not the token, so retrying on a new one only spends the deficit twice.
+    """
+    if resp.status_code == 401:
+        return True
+    if resp.status_code != 403:
+        return False
+    return not _is_rate_limited(resp) and _PERMISSION_DENIED not in resp.text
 
 
 class GitHubGateway:
@@ -90,6 +120,58 @@ class GitHubGateway:
         logger.info("Obtained installation token for %s (installation %d)", owner, installation_id)
         return token
 
+    def _invalidate_token(self, owner: str) -> None:
+        """Drop the cached token so the next call mints a fresh one."""
+        installation_id = self._installation_cache.get(owner)
+        if installation_id is not None:
+            self._token_cache.pop(installation_id, None)
+
+    def _log_http_error(self, resp: httpx.Response) -> None:
+        """Log what GitHub actually said — the reason only ever lives in the body."""
+        logger.warning(
+            "GitHub %s %s -> %d | body=%s | ratelimit=%s/%s reset=%s | "
+            "retry-after=%s | accepted-perms=%s",
+            resp.request.method,
+            resp.request.url.path,
+            resp.status_code,
+            resp.text[:500],
+            resp.headers.get("x-ratelimit-remaining"),
+            resp.headers.get("x-ratelimit-limit"),
+            resp.headers.get("x-ratelimit-reset"),
+            resp.headers.get("retry-after"),
+            resp.headers.get("x-accepted-github-permissions"),
+        )
+
+    async def _authed_get(
+        self,
+        owner: str,
+        path: str,
+        params: dict[str, int] | None = None,
+        *,
+        log_errors: bool = True,
+    ) -> httpx.Response:
+        """GET with an installation token, re-minting it once if GitHub refuses it.
+
+        Tokens are cached for their full hour, so one the API starts rejecting
+        would otherwise poison every request until it expired.
+        """
+        headers = {"Authorization": f"Bearer {await self._get_token(owner)}"}
+        resp = await self._client.get(path, params=params, headers=headers)
+
+        if _looks_like_bad_credentials(resp):
+            if log_errors:
+                self._log_http_error(resp)
+            logger.info("Re-minting token for %s after %d on %s", owner, resp.status_code, path)
+            self._invalidate_token(owner)
+            headers = {"Authorization": f"Bearer {await self._get_token(owner)}"}
+            resp = await self._client.get(path, params=params, headers=headers)
+
+        if resp.is_error and log_errors:
+            self._log_http_error(resp)
+        if _is_rate_limited(resp):
+            raise SourceRateLimitError(reset_at=_reset_at(resp))
+        return resp
+
     def extract_pr_references(self, text: str) -> list[PRUrl]:
         """Extract all GitHub PR URLs from the given text."""
         seen: set[tuple[str, str, int]] = set()
@@ -102,23 +184,19 @@ class GitHubGateway:
         return results
 
     async def fetch_pr_info(self, pr_url: PRUrl) -> PRInfo:
-        token = await self._get_token(pr_url.owner)
-        headers = {"Authorization": f"Bearer {token}"}
+        pr_path = f"/repos/{pr_url.owner}/{pr_url.repo}/pulls/{pr_url.number}"
 
-        pr_resp = await self._client.get(
-            f"/repos/{pr_url.owner}/{pr_url.repo}/pulls/{pr_url.number}",
-            headers=headers,
-        )
+        pr_resp = await self._authed_get(pr_url.owner, pr_path)
         pr_resp.raise_for_status()
         pr_data = pr_resp.json()
 
         reviews: list[Review] = []
         page = 1
         while True:
-            rev_resp = await self._client.get(
-                f"/repos/{pr_url.owner}/{pr_url.repo}/pulls/{pr_url.number}/reviews",
-                params={"per_page": 100, "page": page},
-                headers=headers,
+            rev_resp = await self._authed_get(
+                pr_url.owner,
+                f"{pr_path}/reviews",
+                {"per_page": 100, "page": page},
             )
             rev_resp.raise_for_status()
             page_data = rev_resp.json()
@@ -136,7 +214,7 @@ class GitHubGateway:
             page += 1
 
         head_sha = pr_data.get("head", {}).get("sha")
-        check_runs = await self._fetch_check_runs(pr_url, head_sha, headers)
+        check_runs = await self._fetch_check_runs(pr_url, head_sha)
 
         return PRInfo(
             state=pr_data["state"],
@@ -150,7 +228,6 @@ class GitHubGateway:
         self,
         pr_url: PRUrl,
         head_sha: str | None,
-        headers: dict[str, str],
     ) -> tuple[CheckRun, ...]:
         """Fetch all check-runs for a commit.
 
@@ -166,10 +243,11 @@ class GitHubGateway:
             runs: list[CheckRun] = []
             page = 1
             while True:
-                resp = await self._client.get(
+                resp = await self._authed_get(
+                    pr_url.owner,
                     f"/repos/{pr_url.owner}/{pr_url.repo}/commits/{head_sha}/check-runs",
-                    params={"per_page": 100, "page": page},
-                    headers=headers,
+                    {"per_page": 100, "page": page},
+                    log_errors=False,
                 )
                 resp.raise_for_status()
                 page_runs = resp.json().get("check_runs", [])
@@ -180,6 +258,8 @@ class GitHubGateway:
                 if len(page_runs) < 100:
                     break
                 page += 1
+        except SourceRateLimitError:
+            raise
         except Exception:
             logger.warning("Failed to fetch check-runs for %s@%s", pr_url, head_sha[:7])
             return ()

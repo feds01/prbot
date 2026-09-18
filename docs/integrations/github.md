@@ -101,7 +101,9 @@ two extra steps are needed:
    need an owner to approve.)
 2. **Restart prbot.** Past `check_suite` webhooks are never redelivered, so a
    restart is what lets startup reconciliation catch failures that already
-   happened.
+   happened. Reconciliation only looks back
+   [`PR_BOT_RECONCILE_WINDOW_DAYS`](../configuration.md#reconciliation-window)
+   (7 days by default), so widen that first if the failures are older.
 
 !!! tip "Verifying delivery"
     The app's **Advanced** tab lists **Recent Deliveries**. After setup you

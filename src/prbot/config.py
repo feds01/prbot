@@ -31,5 +31,9 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8080
     emoji: EmojiConfig = EmojiConfig()
+    # How far back startup reconciliation looks. Each PR costs several GitHub
+    # calls against an hourly budget, so a wider window is not free. None means
+    # every tracked PR, which a long-lived database will not get through.
+    reconcile_window_days: int | None = 7
 
     model_config = {"env_prefix": "PR_BOT_", "env_file": ".env", "env_nested_delimiter": "__"}
