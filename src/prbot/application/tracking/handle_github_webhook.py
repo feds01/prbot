@@ -1,6 +1,7 @@
 import logging
 
 from prbot.application.exclusions.manage_self_reviews import MUTE_SELF_REVIEWS_KEY
+from prbot.application.tracking.reaction_manager import ReactionManager
 from prbot.domain.common.ports import ScopeSettingsPort
 from prbot.domain.emoji.ports import EmojiConfigResolverPort
 from prbot.domain.emoji.value_objects import EmojiConfig
@@ -25,7 +26,7 @@ class HandleGitHubWebhook:
         scope_settings: ScopeSettingsPort,
     ) -> None:
         self._source = source
-        self._reactions = reactions
+        self._reactions = ReactionManager(reactions)
         self._repo = pr_repository
         self._emoji_resolver = emoji_resolver
         self._user_exclusions = user_exclusions
@@ -85,22 +86,8 @@ class HandleGitHubWebhook:
                 config_cache[cache_key] = await self._emoji_resolver.resolve(
                     list(tracked.scope_keys)
                 )
-            emoji = config_cache[cache_key].for_status(status)
-            fallback = EmojiConfig.fallback_for_status(status)
+            config = config_cache[cache_key]
 
-            if emoji is None or tracked.has_emoji(emoji):
-                continue
-
-            try:
-                await self._reactions.add_reaction(tracked.message_ref, emoji, fallback)
-            except Exception:
-                # One unreachable message must not starve the others tracking this PR.
-                logger.warning(
-                    "Failed to react to %s for %s, skipping",
-                    tracked.message_ref,
-                    pr_url,
-                    exc_info=True,
-                )
-                continue
-
-            await self._repo.add_emoji(pr_url, tracked.message_ref, emoji)
+            reactions = self._reactions.plan(config, status, pr_info, tracked)
+            for emoji in await self._reactions.apply(tracked.message_ref, reactions):
+                await self._repo.add_emoji(pr_url, tracked.message_ref, emoji)

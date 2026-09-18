@@ -7,7 +7,8 @@ import httpx
 import jwt
 
 from prbot.domain.exclusions.ports import GitHubUserKind, GitHubUserRef
-from prbot.domain.tracking.value_objects import PRInfo, PRUrl, Review, ReviewState
+from prbot.domain.tracking.status_resolver import resolve_ci_failing
+from prbot.domain.tracking.value_objects import CheckRun, PRInfo, PRUrl, Review, ReviewState
 
 _BOT_SUFFIX = "[bot]"
 _USER_TYPE_TO_KIND: dict[str, GitHubUserKind] = {
@@ -134,12 +135,56 @@ class GitHubGateway:
                 break
             page += 1
 
+        head_sha = pr_data.get("head", {}).get("sha")
+        check_runs = await self._fetch_check_runs(pr_url, head_sha, headers)
+
         return PRInfo(
             state=pr_data["state"],
             merged=pr_data.get("merged", False),
             reviews=tuple(reviews),
             author_login=pr_data.get("user", {}).get("login", ""),
+            ci_failing=resolve_ci_failing(check_runs),
         )
+
+    async def _fetch_check_runs(
+        self,
+        pr_url: PRUrl,
+        head_sha: str | None,
+        headers: dict[str, str],
+    ) -> tuple[CheckRun, ...]:
+        """Fetch all check-runs for a commit.
+
+        Generic status data only — interpreting what counts as "failing" is the
+        caller's concern (see ``resolve_ci_failing``). Returns an empty tuple when
+        there is no head SHA or the request fails (e.g. the App lacks the
+        *Checks: read* permission); callers treat "no data" as indeterminate.
+        """
+        if not head_sha:
+            return ()
+
+        try:
+            runs: list[CheckRun] = []
+            page = 1
+            while True:
+                resp = await self._client.get(
+                    f"/repos/{pr_url.owner}/{pr_url.repo}/commits/{head_sha}/check-runs",
+                    params={"per_page": 100, "page": page},
+                    headers=headers,
+                )
+                resp.raise_for_status()
+                page_runs = resp.json().get("check_runs", [])
+                runs.extend(
+                    CheckRun(status=r.get("status", ""), conclusion=r.get("conclusion"))
+                    for r in page_runs
+                )
+                if len(page_runs) < 100:
+                    break
+                page += 1
+        except Exception:
+            logger.warning("Failed to fetch check-runs for %s@%s", pr_url, head_sha[:7])
+            return ()
+
+        return tuple(runs)
 
     async def lookup_user(self, github_username: str) -> GitHubUserRef | None:
         """Resolve a GitHub login via the public API."""

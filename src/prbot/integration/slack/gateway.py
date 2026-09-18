@@ -3,6 +3,7 @@ import time
 import unicodedata
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from enum import StrEnum
 
 from slack_sdk.web.async_client import AsyncWebClient
 
@@ -38,6 +39,27 @@ class ChannelInfo:
     team_id: str
 
 
+# Slack short-names that diverge from the derived Unicode name. The derivation
+# (Unicode name → snake_case) matches Slack for most emoji, but a few Slack
+# aliases differ — e.g. ❌ is `:x:`, not `:cross_mark:`.
+_SLACK_NAME_ALIASES: dict[str, str] = {
+    "cross_mark": "x",
+}
+
+
+class SlackErrorCode(StrEnum):
+    """Slack API error codes we handle specially when a reaction fails.
+
+    slack_sdk raises these embedded in a longer message, so we detect them by
+    substring (see ``_slack_error_code``).
+    """
+
+    ALREADY_REACTED = "already_reacted"
+    INVALID_NAME = "invalid_name"
+    NO_REACTION = "no_reaction"
+    MESSAGE_NOT_FOUND = "message_not_found"
+
+
 class _MessageGoneError(Exception):
     """The target message no longer exists — retrying any emoji is pointless."""
 
@@ -64,9 +86,10 @@ class SlackGateway:
         # spaces replaced by underscores — this matches Slack's naming
         # convention for most standard emoji.
         try:
-            return unicodedata.name(emoji[0]).lower().replace(" ", "_").replace("-", "_")
+            name = unicodedata.name(emoji[0]).lower().replace(" ", "_").replace("-", "_")
         except ValueError:
             return emoji
+        return _SLACK_NAME_ALIASES.get(name, name)
 
     async def add_reaction(
         self,
@@ -91,6 +114,11 @@ class SlackGateway:
         except _MessageGoneError:
             return
 
+    @staticmethod
+    def _slack_error_code(message: str) -> SlackErrorCode | None:
+        """Extract a known Slack API error code from an exception message, or None."""
+        return next((code for code in SlackErrorCode if code.value in message), None)
+
     async def _try_react(self, channel: str, timestamp: str, emoji: str) -> bool:
         """Add a reaction, swallowing benign failures. Returns True on success."""
         try:
@@ -101,19 +129,22 @@ class SlackGateway:
             )
             return True
         except Exception as exc:
-            msg = str(exc)
-            if "already_reacted" in msg:
-                logger.debug("Already reacted with %s", emoji)
-                return True
-            if "invalid_name" in msg or "no_reaction" in msg:
-                logger.warning("Unknown emoji %r in workspace for %s:%s", emoji, channel, timestamp)
-                return False
-            if "message_not_found" in msg:
-                logger.warning(
-                    "Message %s:%s no longer exists, skipping reaction", channel, timestamp
-                )
-                raise _MessageGoneError from exc
-            raise
+            match self._slack_error_code(str(exc)):
+                case SlackErrorCode.ALREADY_REACTED:
+                    logger.debug("Already reacted with %s", emoji)
+                    return True
+                case SlackErrorCode.INVALID_NAME | SlackErrorCode.NO_REACTION:
+                    logger.warning(
+                        "Unknown emoji %r in workspace for %s:%s", emoji, channel, timestamp
+                    )
+                    return False
+                case SlackErrorCode.MESSAGE_NOT_FOUND:
+                    logger.warning(
+                        "Message %s:%s no longer exists, skipping reaction", channel, timestamp
+                    )
+                    raise _MessageGoneError from exc
+                case _:
+                    raise
 
     async def list_bot_channels(self) -> list[ChannelInfo]:
         """List all channels the bot is a member of, using cursor-based pagination."""

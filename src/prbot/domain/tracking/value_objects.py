@@ -6,7 +6,13 @@ from pydantic import BaseModel
 
 
 class PRStatus(StrEnum):
-    """Resolved status of a PR, ordered by priority."""
+    """Resolved status of a PR.
+
+    Every status except ``CI_FAILED`` is a mutually-exclusive outcome of
+    ``resolve_pr_status`` — one wins per evaluation. ``CI_FAILED`` comes from
+    check-runs, not reviews, so it is applied *alongside* that winner rather
+    than replacing it.
+    """
 
     MERGED = "merged"
     CLOSED = "closed"
@@ -14,6 +20,7 @@ class PRStatus(StrEnum):
     APPROVED = "approved"
     COMMENTED = "commented"
     OPEN = "open"
+    CI_FAILED = "ci_failed"
 
 
 class ReviewState(StrEnum):
@@ -55,6 +62,17 @@ class Review(BaseModel, frozen=True):
     state: ReviewState
 
 
+class CheckRun(BaseModel, frozen=True):
+    """A single CI check-run on a commit, as reported by GitHub.
+
+    Generic status data only — deciding what counts as "failing" is a policy
+    concern left to the caller (see ``resolve_ci_failing``).
+    """
+
+    status: str  # "queued" | "in_progress" | "completed"
+    conclusion: str | None  # "success" | "failure" | ...; None while running
+
+
 class PRInfo(BaseModel, frozen=True):
     """Data fetched from GitHub API about a PR's current state."""
 
@@ -62,3 +80,4 @@ class PRInfo(BaseModel, frozen=True):
     merged: bool
     reviews: tuple[Review, ...]
     author_login: str = ""
+    ci_failing: bool | None = None

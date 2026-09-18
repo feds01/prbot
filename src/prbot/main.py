@@ -25,6 +25,7 @@ from prbot.data.scope_settings import SQLiteScopeSettingsRepository
 from prbot.data.user_exclusions import SQLiteUserExclusionRepository
 from prbot.infrastructure.github_gateway import GitHubGateway
 from prbot.infrastructure.github_webhook_models import (
+    CheckSuiteEvent,
     PullRequestEvent,
     PullRequestReviewEvent,
 )
@@ -180,7 +181,7 @@ async def github_webhooks(req: Request) -> dict[str, bool]:
 
     event_type = req.headers.get("X-GitHub-Event")
 
-    if event_type not in ("pull_request", "pull_request_review"):
+    if event_type not in ("pull_request", "pull_request_review", "check_suite"):
         logger.warning("Ignoring GitHub event: %s", event_type)
         return {"ok": True}
 
@@ -192,39 +193,60 @@ async def github_webhooks(req: Request) -> dict[str, bool]:
 
     payload = await req.json()
 
-    if event_type == "pull_request":
-        event = PullRequestEvent.model_validate(payload)
-        logger.info(
-            "PR event: %s %s#%d",
-            event.action,
-            event.repository.full_name,
-            event.pull_request.number,
-        )
-        if event.action in ("opened", "closed", "reopened", "synchronize"):
-            owner, repo = event.repository.full_name.split("/")
-            await handle_github_webhook.execute(
-                owner=owner,
-                repo=repo,
-                number=event.pull_request.number,
-                sender=event.sender.login,
+    match event_type:
+        case "pull_request":
+            event = PullRequestEvent.model_validate(payload)
+            logger.info(
+                "PR event: %s %s#%d",
+                event.action,
+                event.repository.full_name,
+                event.pull_request.number,
             )
+            if event.action in ("opened", "closed", "reopened", "synchronize"):
+                owner, repo = event.repository.full_name.split("/")
+                await handle_github_webhook.execute(
+                    owner=owner,
+                    repo=repo,
+                    number=event.pull_request.number,
+                    sender=event.sender.login,
+                )
 
-    elif event_type == "pull_request_review":
-        review_event = PullRequestReviewEvent.model_validate(payload)
-        logger.info(
-            "PR review event: %s %s#%d",
-            review_event.action,
-            review_event.repository.full_name,
-            review_event.pull_request.number,
-        )
-        if review_event.action in ("submitted", "dismissed"):
-            owner, repo = review_event.repository.full_name.split("/")
-            await handle_github_webhook.execute(
-                owner=owner,
-                repo=repo,
-                number=review_event.pull_request.number,
-                sender=review_event.sender.login,
+        case "pull_request_review":
+            review_event = PullRequestReviewEvent.model_validate(payload)
+            logger.info(
+                "PR review event: %s %s#%d",
+                review_event.action,
+                review_event.repository.full_name,
+                review_event.pull_request.number,
             )
+            if review_event.action in ("submitted", "dismissed"):
+                owner, repo = review_event.repository.full_name.split("/")
+                await handle_github_webhook.execute(
+                    owner=owner,
+                    repo=repo,
+                    number=review_event.pull_request.number,
+                    sender=review_event.sender.login,
+                )
+
+        case "check_suite":
+            suite_event = CheckSuiteEvent.model_validate(payload)
+            logger.info(
+                "Check suite event: %s %s (%d PRs)",
+                suite_event.action,
+                suite_event.repository.full_name,
+                len(suite_event.check_suite.pull_requests),
+            )
+            # Only completed suites carry a final conclusion. The handler re-fetches
+            # the aggregate CI state, so we just need the PR numbers to re-evaluate.
+            if suite_event.action == "completed":
+                owner, repo = suite_event.repository.full_name.split("/")
+                for pr in suite_event.check_suite.pull_requests:
+                    await handle_github_webhook.execute(
+                        owner=owner,
+                        repo=repo,
+                        number=pr.number,
+                        sender=suite_event.sender.login,
+                    )
 
     return {"ok": True}
 
