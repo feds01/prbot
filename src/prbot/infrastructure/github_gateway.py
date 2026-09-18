@@ -26,11 +26,22 @@ _PERMISSION_DENIED = "Resource not accessible by integration"
 logger = logging.getLogger(__name__)
 
 
+def _is_rate_limited(resp: httpx.Response) -> bool:
+    """GitHub answers 403 — not 429 — once the hourly budget is spent."""
+    return resp.status_code == 403 and resp.headers.get("x-ratelimit-remaining") == "0"
+
+
 def _looks_like_bad_credentials(resp: httpx.Response) -> bool:
-    """Whether a fresh installation token might succeed where this one failed."""
+    """Whether a fresh installation token might succeed where this one failed.
+
+    A rate-limit 403 must not qualify: the budget belongs to the installation,
+    not the token, so retrying on a new one only spends the deficit twice.
+    """
     if resp.status_code == 401:
         return True
-    return resp.status_code == 403 and _PERMISSION_DENIED not in resp.text
+    if resp.status_code != 403:
+        return False
+    return not _is_rate_limited(resp) and _PERMISSION_DENIED not in resp.text
 
 
 class GitHubGateway:
