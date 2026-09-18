@@ -7,6 +7,7 @@ import httpx
 import jwt
 
 from prbot.domain.exclusions.ports import GitHubUserKind, GitHubUserRef
+from prbot.domain.tracking.ports import SourceRateLimitError
 from prbot.domain.tracking.status_resolver import resolve_ci_failing
 from prbot.domain.tracking.value_objects import CheckRun, PRInfo, PRUrl, Review, ReviewState
 
@@ -29,6 +30,13 @@ logger = logging.getLogger(__name__)
 def _is_rate_limited(resp: httpx.Response) -> bool:
     """GitHub answers 403 — not 429 — once the hourly budget is spent."""
     return resp.status_code == 403 and resp.headers.get("x-ratelimit-remaining") == "0"
+
+
+def _reset_at(resp: httpx.Response) -> float | None:
+    try:
+        return float(resp.headers["x-ratelimit-reset"])
+    except KeyError, ValueError:
+        return None
 
 
 def _looks_like_bad_credentials(resp: httpx.Response) -> bool:
@@ -160,6 +168,8 @@ class GitHubGateway:
 
         if resp.is_error and log_errors:
             self._log_http_error(resp)
+        if _is_rate_limited(resp):
+            raise SourceRateLimitError(reset_at=_reset_at(resp))
         return resp
 
     def extract_pr_references(self, text: str) -> list[PRUrl]:
@@ -248,6 +258,8 @@ class GitHubGateway:
                 if len(page_runs) < 100:
                     break
                 page += 1
+        except SourceRateLimitError:
+            raise
         except Exception:
             logger.warning("Failed to fetch check-runs for %s@%s", pr_url, head_sha[:7])
             return ()

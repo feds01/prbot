@@ -5,6 +5,18 @@ from prbot.domain.tracking.entities import TrackedPR
 from prbot.domain.tracking.value_objects import MessageRef, PRInfo, PRUrl
 
 
+class SourceRateLimitError(Exception):
+    """The source has no request budget left until *reset_at*.
+
+    Distinct from an ordinary fetch failure: retrying costs quota that is not
+    there, so callers doing bulk work should stop rather than skip ahead.
+    """
+
+    def __init__(self, reset_at: float | None = None) -> None:
+        super().__init__("source rate limit exhausted")
+        self.reset_at = reset_at
+
+
 class PRSourcePort(Protocol):
     """Port for an input source that can recognise and fetch PR references.
 
@@ -43,7 +55,12 @@ class PRRepositoryPort(Protocol):
 
     async def find_by_pr_url(self, pr_url: PRUrl) -> Sequence[TrackedPR]: ...
 
-    async def find_distinct_pr_urls(self) -> Sequence[PRUrl]: ...
+    async def find_distinct_pr_urls(self, since: str | None = None) -> Sequence[PRUrl]:
+        """Distinct tracked PRs, most recently active first.
+
+        When *since* is given, only PRs touched at or after that timestamp.
+        """
+        ...
 
     async def add_emoji(
         self,

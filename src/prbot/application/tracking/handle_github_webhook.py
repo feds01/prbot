@@ -6,7 +6,12 @@ from prbot.domain.common.ports import ScopeSettingsPort
 from prbot.domain.emoji.ports import EmojiConfigResolverPort
 from prbot.domain.emoji.value_objects import EmojiConfig
 from prbot.domain.exclusions.ports import UserExclusionPort
-from prbot.domain.tracking.ports import PRRepositoryPort, PRSourcePort, ReactionPort
+from prbot.domain.tracking.ports import (
+    PRRepositoryPort,
+    PRSourcePort,
+    ReactionPort,
+    SourceRateLimitError,
+)
 from prbot.domain.tracking.status_resolver import filter_pr_info, resolve_pr_status
 from prbot.domain.tracking.value_objects import PRStatus, PRUrl
 
@@ -38,20 +43,27 @@ class HandleGitHubWebhook:
         repo: str,
         number: int,
         sender: str | None = None,
-    ) -> None:
-        """Re-evaluate PR status and add new reactions to all messages tracking it."""
+    ) -> bool:
+        """Re-evaluate PR status and add new reactions to all messages tracking it.
+
+        Returns whether the PR was actually evaluated, so bulk callers can tell
+        a genuine pass from a skipped one. Raises ``SourceRateLimitError`` rather
+        than swallowing it: there is no budget left for the PRs still queued.
+        """
         pr_url = PRUrl(owner=owner, repo=repo, number=number)
 
         tracked_prs = await self._repo.find_by_pr_url(pr_url)
         if not tracked_prs:
             logger.debug("No tracked messages for %s", pr_url)
-            return
+            return True
 
         try:
             pr_info = await self._source.fetch_pr_info(pr_url)
+        except SourceRateLimitError:
+            raise
         except Exception:
             logger.warning("Failed to fetch PR info for %s, skipping", pr_url, exc_info=True)
-            return
+            return False
 
         # Cache per scope-chain to avoid repeated DB queries for identical scopes
         config_cache: dict[tuple[str, ...], EmojiConfig] = {}
@@ -91,3 +103,5 @@ class HandleGitHubWebhook:
             reactions = self._reactions.plan(config, status, pr_info, tracked)
             for emoji in await self._reactions.apply(tracked.message_ref, reactions):
                 await self._repo.add_emoji(pr_url, tracked.message_ref, emoji)
+
+        return True

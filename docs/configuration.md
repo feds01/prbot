@@ -43,6 +43,21 @@ Setting this enables the Discord integration. If omitted, prbot starts without D
 | `PR_BOT_HOST`         | `0.0.0.0`       | Server bind address        |
 | `PR_BOT_PORT`         | `8080`           | Server port                |
 | `PR_BOT_DATABASE_PATH`| `data/pr_bot.db` | Path to SQLite database    |
+| `PR_BOT_RECONCILE_WINDOW_DAYS` | `7` | How far back startup reconciliation looks |
+
+### Reconciliation window
+
+On startup prbot re-checks tracked PRs to catch events it missed while down.
+Each PR costs three GitHub calls (pull request, reviews, check-runs) and a
+GitHub App installation gets **5,000 requests per hour**, so the window is what
+keeps a long-lived database from spending the entire hourly budget on PRs that
+were merged months ago — and then running dry before it reaches the ones people
+are actually waiting on.
+
+Widen it to recover from a longer outage, e.g. `PR_BOT_RECONCILE_WINDOW_DAYS=30`.
+Roughly, `tracked PRs in window x 3` must stay under 5,000. Setting it empty
+reconciles every tracked PR, which is only safe for a small database.
+Reconciliation stops early and logs a warning if the budget runs out.
 
 ## Custom emoji
 

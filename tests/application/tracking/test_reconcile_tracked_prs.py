@@ -3,6 +3,7 @@ import pytest
 from prbot.application.tracking.handle_github_webhook import HandleGitHubWebhook
 from prbot.application.tracking.reconcile_tracked_prs import ReconcileTrackedPRs
 from prbot.domain.tracking.entities import TrackedPR
+from prbot.domain.tracking.ports import SourceRateLimitError
 from prbot.domain.tracking.value_objects import MessageRef, PRInfo, PRUrl
 from tests.conftest import (
     FakeEmojiConfigResolver,
@@ -139,3 +140,65 @@ class TestReconcileTrackedPRs:
         # PR #2 fails silently (HandleGitHubWebhook catches fetch failures),
         # so all 3 PRs are attempted and the 2 that succeed get reactions
         assert len(reactions.added) == 2
+
+
+class _RateLimitedPRSource(FakePRSource):
+    """A source whose budget runs out once *after_calls* PRs have been fetched."""
+
+    def __init__(self, pr_info: PRInfo, after_calls: int) -> None:
+        super().__init__(pr_info)
+        self._after_calls = after_calls
+        self.calls = 0
+
+    async def fetch_pr_info(self, pr_url: PRUrl) -> PRInfo:
+        self.calls += 1
+        if self.calls > self._after_calls:
+            raise SourceRateLimitError(reset_at=None)
+        return await super().fetch_pr_info(pr_url)
+
+
+class TestReconciliationBudget:
+    @pytest.fixture
+    def reactions(self) -> FakeReactions:
+        return FakeReactions()
+
+    @pytest.fixture
+    def repo(self) -> FakePRRepository:
+        return FakePRRepository()
+
+    @pytest.fixture
+    def resolver(self) -> FakeEmojiConfigResolver:
+        return FakeEmojiConfigResolver()
+
+    async def test_window_is_passed_to_the_repository(
+        self, reactions: FakeReactions, repo: FakePRRepository, resolver: FakeEmojiConfigResolver
+    ) -> None:
+        use_case = _make_use_case(FakePRSource(OPEN_INFO), reactions, repo, resolver)
+        use_case._window_days = 7
+
+        await use_case.execute()
+
+        assert repo.since_arg is not None
+
+    async def test_no_window_reconciles_everything(
+        self, reactions: FakeReactions, repo: FakePRRepository, resolver: FakeEmojiConfigResolver
+    ) -> None:
+        use_case = _make_use_case(FakePRSource(OPEN_INFO), reactions, repo, resolver)
+        use_case._window_days = None
+
+        await use_case.execute()
+
+        assert repo.since_arg is None
+
+    async def test_stops_once_the_budget_is_gone(
+        self, reactions: FakeReactions, repo: FakePRRepository, resolver: FakeEmojiConfigResolver
+    ) -> None:
+        for n in range(1, 61):
+            repo.stored.append(TrackedPR(pr_url=_pr_url(n), message_ref=_msg_ref(ts=f"{n}.0")))
+        source = _RateLimitedPRSource(MERGED_INFO, after_calls=20)
+        use_case = _make_use_case(source, reactions, repo, resolver)
+
+        await use_case.execute()
+
+        # Without the early stop this would keep spending calls on all 60 PRs.
+        assert source.calls < 60

@@ -52,7 +52,8 @@ class FakePRRepository:
     async def find_by_pr_url(self, pr_url: PRUrl) -> Sequence[TrackedPR]:
         return [t for t in self.stored if t.pr_url == pr_url]
 
-    async def find_distinct_pr_urls(self) -> Sequence[PRUrl]:
+    async def find_distinct_pr_urls(self, since: str | None = None) -> Sequence[PRUrl]:
+        self.since_arg = since
         seen: set[PRUrl] = set()
         results: list[PRUrl] = []
         for t in self.stored:
