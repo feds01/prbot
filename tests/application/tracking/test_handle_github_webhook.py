@@ -1,3 +1,5 @@
+from typing import override
+
 import pytest
 
 from prbot.application.tracking.handle_github_webhook import HandleGitHubWebhook
@@ -57,7 +59,12 @@ class TestHandleGitHubWebhook:
         merged_info = PRInfo(state="closed", merged=True, reviews=())
         source = FakePRSource(merged_info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute("o", "r", 1)
@@ -83,7 +90,12 @@ class TestHandleGitHubWebhook:
         merged_info = PRInfo(state="closed", merged=True, reviews=())
         source = FakePRSource(merged_info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute("o", "r", 1)
@@ -102,7 +114,12 @@ class TestHandleGitHubWebhook:
         open_info = PRInfo(state="open", merged=False, reviews=())
         source = FakePRSource(open_info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute("o", "r", 1)
@@ -124,7 +141,12 @@ class TestHandleGitHubWebhook:
         merged_info = PRInfo(state="closed", merged=True, reviews=())
         source = FakePRSource(merged_info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute("o", "r", 1)
@@ -145,6 +167,7 @@ class TestHandleGitHubWebhook:
         repo.stored.append(TrackedPR(pr_url=_pr_url(), message_ref=alive))
 
         class ExplodingReactions(FakeReactions):
+            @override
             async def add_reaction(
                 self,
                 message_ref: MessageRef,
@@ -152,14 +175,20 @@ class TestHandleGitHubWebhook:
                 fallback_emoji: str | None = None,
             ) -> None:
                 if message_ref == dead:
-                    raise RuntimeError("message_not_found")
+                    msg = "message_not_found"
+                    raise RuntimeError(msg)
                 await super().add_reaction(message_ref, emoji, fallback_emoji)
 
         reactions = ExplodingReactions()
         merged_info = PRInfo(state="closed", merged=True, reviews=())
         source = FakePRSource(merged_info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute("o", "r", 1)
@@ -180,7 +209,12 @@ class TestHandleGitHubWebhook:
         merged_info = PRInfo(state="closed", merged=True, reviews=())
         source = FakePRSource(merged_info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute("o", "r", 999)
@@ -209,7 +243,12 @@ class TestHandleGitHubWebhook:
         )
         source = FakePRSource(approved_info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute("o", "r", 1)
@@ -233,7 +272,12 @@ class TestHandleGitHubWebhook:
         merged_info = PRInfo(state="closed", merged=True, reviews=())
         source = FakePRSource(merged_info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute("o", "r", 1, sender="Cursor")
@@ -256,7 +300,12 @@ class TestHandleGitHubWebhook:
         merged_info = PRInfo(state="closed", merged=True, reviews=())
         source = FakePRSource(merged_info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute("o", "r", 1, sender="alice")
@@ -279,7 +328,12 @@ class TestHandleGitHubWebhook:
         merged_info = PRInfo(state="closed", merged=True, reviews=())
         source = FakePRSource(merged_info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute("o", "r", 1, sender="Cursor")
@@ -307,7 +361,12 @@ class TestHandleGitHubWebhook:
         )
         source = FakePRSource(commented_info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute("o", "r", 1, sender="alice")
@@ -334,7 +393,12 @@ class TestHandleGitHubWebhook:
         )
         source = FakePRSource(commented_info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute("o", "r", 1, sender="alice")
@@ -363,7 +427,12 @@ class TestHandleGitHubWebhook:
         )
         source = FakePRSource(commented_info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute("o", "r", 1, sender="bob")
@@ -395,7 +464,12 @@ class TestHandleGitHubWebhook:
         )
         source = FakePRSource(info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute("o", "r", 1, sender="alice")
@@ -429,7 +503,12 @@ class TestHandleGitHubWebhook:
         )
         source = FakePRSource(info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute("o", "r", 1, sender="alice")
@@ -458,7 +537,12 @@ class TestHandleGitHubWebhook:
         )
         source = FakePRSource(info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         # Webhook from a different sender (e.g. PR opened/synchronized event)
@@ -479,7 +563,12 @@ class TestHandleGitHubWebhook:
         info = PRInfo(state="open", merged=False, reviews=(), ci_failing=True)
         source = FakePRSource(info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute("o", "r", 1)
@@ -504,7 +593,12 @@ class TestHandleGitHubWebhook:
         )
         source = FakePRSource(info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute("o", "r", 1)
@@ -530,7 +624,12 @@ class TestHandleGitHubWebhook:
         info = PRInfo(state="open", merged=False, reviews=(), ci_failing=True)
         source = FakePRSource(info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute("o", "r", 1)
@@ -553,7 +652,12 @@ class TestHandleGitHubWebhook:
         info = PRInfo(state="open", merged=False, reviews=(), ci_failing=ci_failing)
         source = FakePRSource(info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute("o", "r", 1)
@@ -576,7 +680,12 @@ class TestHandleGitHubWebhook:
         info = PRInfo(state="open", merged=False, reviews=(), ci_failing=True)
         source = FakePRSource(info)
         use_case = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, scope_settings
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute("o", "r", 1, sender="Cursor")

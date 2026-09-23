@@ -89,7 +89,10 @@ class ReconcileTrackedPRs:
         )
 
     async def _reconcile_one(self, semaphore: asyncio.Semaphore, pr_url: PRUrl) -> bool | None:
-        """True if evaluated, False if skipped, None if the budget ran out."""
+        """Reconcile one PR.
+
+        Returns True if evaluated, False if skipped, None if the budget ran out.
+        """
         async with semaphore:
             logger.debug("Reconciling %s", pr_url)
             try:

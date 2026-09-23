@@ -1,7 +1,8 @@
 import asyncio
 import logging
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from http import HTTPStatus
 
 from fastapi import FastAPI, HTTPException, Request
 
@@ -171,6 +172,73 @@ api = FastAPI(lifespan=lifespan)
 registry.register_all_routes(api)
 
 
+async def _on_pull_request(payload: object) -> None:
+    event = PullRequestEvent.model_validate(payload)
+    logger.info(
+        "PR event: %s %s#%d",
+        event.action,
+        event.repository.full_name,
+        event.pull_request.number,
+    )
+    if event.action not in ("opened", "closed", "reopened", "synchronize"):
+        return
+    owner, repo = event.repository.full_name.split("/")
+    await handle_github_webhook.execute(
+        owner=owner,
+        repo=repo,
+        number=event.pull_request.number,
+        sender=event.sender.login,
+    )
+
+
+async def _on_pull_request_review(payload: object) -> None:
+    event = PullRequestReviewEvent.model_validate(payload)
+    logger.info(
+        "PR review event: %s %s#%d",
+        event.action,
+        event.repository.full_name,
+        event.pull_request.number,
+    )
+    if event.action not in ("submitted", "dismissed"):
+        return
+    owner, repo = event.repository.full_name.split("/")
+    await handle_github_webhook.execute(
+        owner=owner,
+        repo=repo,
+        number=event.pull_request.number,
+        sender=event.sender.login,
+    )
+
+
+async def _on_check_suite(payload: object) -> None:
+    event = CheckSuiteEvent.model_validate(payload)
+    logger.info(
+        "Check suite event: %s %s (%d PRs)",
+        event.action,
+        event.repository.full_name,
+        len(event.check_suite.pull_requests),
+    )
+    # Only completed suites carry a final conclusion. The handler re-fetches
+    # the aggregate CI state, so we just need the PR numbers to re-evaluate.
+    if event.action != "completed":
+        return
+    owner, repo = event.repository.full_name.split("/")
+    for pr in event.check_suite.pull_requests:
+        await handle_github_webhook.execute(
+            owner=owner,
+            repo=repo,
+            number=pr.number,
+            sender=event.sender.login,
+        )
+
+
+_GITHUB_EVENT_HANDLERS: dict[str, Callable[[object], Awaitable[None]]] = {
+    "pull_request": _on_pull_request,
+    "pull_request_review": _on_pull_request_review,
+    "check_suite": _on_check_suite,
+}
+
+
 @api.post("/github/webhooks")
 async def github_webhooks(req: Request) -> dict[str, bool]:
     """GitHub webhook endpoint with HMAC-SHA256 verification."""
@@ -178,11 +246,12 @@ async def github_webhooks(req: Request) -> dict[str, bool]:
     signature = req.headers.get("X-Hub-Signature-256")
 
     if not verify_github_signature(body, settings.github_webhook_secret, signature):
-        raise HTTPException(status_code=403, detail="Invalid signature")
+        raise HTTPException(status_code=HTTPStatus.FORBIDDEN, detail="Invalid signature")
 
     event_type = req.headers.get("X-GitHub-Event")
+    handler = _GITHUB_EVENT_HANDLERS.get(event_type or "")
 
-    if event_type not in ("pull_request", "pull_request_review", "check_suite"):
+    if handler is None:
         logger.warning("Ignoring GitHub event: %s", event_type)
         return {"ok": True}
 
@@ -192,63 +261,7 @@ async def github_webhooks(req: Request) -> dict[str, bool]:
         logger.warning("Empty body for %s event, skipping", event_type)
         return {"ok": True}
 
-    payload = await req.json()
-
-    match event_type:
-        case "pull_request":
-            event = PullRequestEvent.model_validate(payload)
-            logger.info(
-                "PR event: %s %s#%d",
-                event.action,
-                event.repository.full_name,
-                event.pull_request.number,
-            )
-            if event.action in ("opened", "closed", "reopened", "synchronize"):
-                owner, repo = event.repository.full_name.split("/")
-                await handle_github_webhook.execute(
-                    owner=owner,
-                    repo=repo,
-                    number=event.pull_request.number,
-                    sender=event.sender.login,
-                )
-
-        case "pull_request_review":
-            review_event = PullRequestReviewEvent.model_validate(payload)
-            logger.info(
-                "PR review event: %s %s#%d",
-                review_event.action,
-                review_event.repository.full_name,
-                review_event.pull_request.number,
-            )
-            if review_event.action in ("submitted", "dismissed"):
-                owner, repo = review_event.repository.full_name.split("/")
-                await handle_github_webhook.execute(
-                    owner=owner,
-                    repo=repo,
-                    number=review_event.pull_request.number,
-                    sender=review_event.sender.login,
-                )
-
-        case "check_suite":
-            suite_event = CheckSuiteEvent.model_validate(payload)
-            logger.info(
-                "Check suite event: %s %s (%d PRs)",
-                suite_event.action,
-                suite_event.repository.full_name,
-                len(suite_event.check_suite.pull_requests),
-            )
-            # Only completed suites carry a final conclusion. The handler re-fetches
-            # the aggregate CI state, so we just need the PR numbers to re-evaluate.
-            if suite_event.action == "completed":
-                owner, repo = suite_event.repository.full_name.split("/")
-                for pr in suite_event.check_suite.pull_requests:
-                    await handle_github_webhook.execute(
-                        owner=owner,
-                        repo=repo,
-                        number=pr.number,
-                        sender=suite_event.sender.login,
-                    )
-
+    await handler(await req.json())
     return {"ok": True}
 
 

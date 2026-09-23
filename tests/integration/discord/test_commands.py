@@ -20,7 +20,7 @@ class TestRegisterCommands:
         tree = _build_tree()
         dispatcher = MagicMock(spec=CommandDispatcher)
 
-        register_commands(tree, dispatcher, lambda **kwargs: ["discord"])
+        register_commands(tree, dispatcher, lambda **_kwargs: ["discord"])
 
         prbot = tree.get_command("prbot")
         assert isinstance(prbot, app_commands.Group)

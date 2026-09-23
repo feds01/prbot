@@ -164,7 +164,8 @@ class TestBackfillMissedMessages:
         backfill = _make_backfill(cursor_repo)
 
         async def unreachable(ch: ChannelDescriptor, oldest: str) -> AsyncIterator[HistoryItem]:
-            raise AssertionError("Should not be called")
+            msg = "Should not be called"
+            raise AssertionError(msg)
             yield
 
         await backfill.execute(channels=[], fetch_history=unreachable)

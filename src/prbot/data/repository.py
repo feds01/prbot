@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from collections.abc import Sequence
 
 from sqlalchemy import func, select, update
@@ -207,7 +205,7 @@ def _serialize_emojis(emojis: frozenset[str]) -> str:
 
 def _deserialize_emojis(value: str | None) -> frozenset[str]:
     if not value:
-        return frozenset()
+        return frozenset[str]()
     return frozenset(value.split(","))
 
 

@@ -1,5 +1,6 @@
 import time
 
+import httpx
 import pytest
 import respx
 from cryptography.hazmat.primitives import serialization
@@ -143,7 +144,7 @@ class TestGitHubGateway:
             return_value=Response(404, json={"message": "Not Found"})
         )
 
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(httpx.HTTPStatusError, match="404"):
             await gateway.fetch_pr_info(pr_url)
 
 
@@ -157,7 +158,7 @@ def _mock_pr_with_head(sha: str = "abc123") -> None:
     )
 
 
-def _mock_check_runs(sha: str, runs: list[dict], status_code: int = 200) -> None:
+def _mock_check_runs(sha: str, runs: list[dict[str, object]], status_code: int = 200) -> None:
     respx.get(f"https://api.github.com/repos/octocat/hello/commits/{sha}/check-runs").mock(
         return_value=Response(status_code, json={"check_runs": runs})
     )

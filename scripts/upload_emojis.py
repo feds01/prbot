@@ -2,20 +2,19 @@
 """Upload prbot custom emoji to Slack or Discord.
 
 Usage:
-    # Slack – requires an admin-level token (xoxp-...) with admin.emoji:write scope
+    # Slack - requires an admin-level token (xoxp-...) with admin.emoji:write scope
     python scripts/upload_emojis.py slack --token xoxp-...
 
-    # Discord – requires a bot token with Manage Guild Expressions permission
+    # Discord - requires a bot token with Manage Guild Expressions permission
     python scripts/upload_emojis.py discord --token Bot-TOKEN --guild-id 123456789
 
 Emoji images are read from the docs/images/emojis/ directory relative to this script.
 """
 
-from __future__ import annotations
-
 import argparse
 import base64
 import sys
+from http import HTTPStatus
 from pathlib import Path
 
 import httpx
@@ -36,11 +35,11 @@ console = Console()
 
 def discover_emojis() -> list[tuple[str, Path]]:
     """Return (name, path) pairs for every emoji image in the emojis/ directory."""
-    emojis: list[tuple[str, Path]] = []
-    for path in sorted(EMOJIS_DIR.iterdir()):
-        if path.suffix.lower() in MIME_TYPES:
-            emojis.append((path.stem, path))
-    return emojis
+    return [
+        (path.stem, path)
+        for path in sorted(EMOJIS_DIR.iterdir())
+        if path.suffix.lower() in MIME_TYPES
+    ]
 
 
 def build_results_table(
@@ -92,7 +91,7 @@ def upload_slack(token: str) -> None:
             elif body.get("error") == "error_name_taken":
                 results.append((name, "skipped"))
             else:
-                results.append((name, f"FAILED – {body.get('error', resp.text)}"))
+                results.append((name, f"FAILED - {body.get('error', resp.text)}"))
 
     console.print(build_results_table("Slack", results))
 
@@ -122,12 +121,12 @@ def upload_discord(token: str, guild_id: str) -> None:
                 json={"name": name, "image": data_uri},
             )
 
-            if resp.status_code == 201:
+            if resp.status_code == HTTPStatus.CREATED:
                 results.append((name, "uploaded"))
-            elif resp.status_code == 400 and "already" in resp.text.lower():
+            elif resp.status_code == HTTPStatus.BAD_REQUEST and "already" in resp.text.lower():
                 results.append((name, "skipped"))
             else:
-                results.append((name, f"FAILED ({resp.status_code}) – {resp.text}"))
+                results.append((name, f"FAILED ({resp.status_code}) - {resp.text}"))
 
     console.print(build_results_table("Discord", results))
 

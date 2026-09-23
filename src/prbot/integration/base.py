@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Protocol
 
 from fastapi import FastAPI
@@ -53,7 +51,8 @@ class IntegrationRegistry:
     ) -> None:
         handler = self._handlers.get(message_ref.integration_id)
         if handler is None:
-            raise ValueError(f"No integration registered for '{message_ref.integration_id}'")
+            msg = f"No integration registered for '{message_ref.integration_id}'"
+            raise ValueError(msg)
         await handler.reaction_port().add_reaction(message_ref, emoji, fallback_emoji)
 
     def register_all_routes(self, app: FastAPI) -> None:

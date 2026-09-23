@@ -103,10 +103,11 @@ class DiscordIntegration:
         await self._ready_event.wait()
 
         guilds = self._gateway.list_bot_guilds()
-        descriptors: list[ChannelDescriptor] = []
-        for guild in guilds:
-            for ch in self._gateway.list_text_channels(guild):
-                descriptors.append(ChannelDescriptor(channel_id=str(ch.id), team_id=str(guild.id)))
+        descriptors = [
+            ChannelDescriptor(channel_id=str(ch.id), team_id=str(guild.id))
+            for guild in guilds
+            for ch in self._gateway.list_text_channels(guild)
+        ]
 
         await self._backfill.execute(
             channels=descriptors,

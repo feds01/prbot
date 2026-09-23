@@ -20,7 +20,7 @@ class ManageSelfReviews:
         current = await self._settings.get([scope_key], MUTE_SELF_REVIEWS_KEY)
         if current:
             return False
-        await self._settings.set(scope_key, MUTE_SELF_REVIEWS_KEY, True)
+        await self._settings.set(scope_key, MUTE_SELF_REVIEWS_KEY, value=True)
         return True
 
     async def unmute(self, scope_key: str) -> bool:

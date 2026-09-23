@@ -11,9 +11,11 @@ jobs:
     name: Lint, format & typecheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10.2.0
+
+      - run: uv lock --check
 
       - run: uv run ruff check .
 
@@ -23,13 +25,15 @@ jobs:
 
       - run: uv run python scripts/check_migrations.py
 
+      - run: uv run lint-imports
+
   test:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10.2.0
 
       - run: uv run pytest
 
@@ -40,7 +44,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     concurrency: deploy
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 

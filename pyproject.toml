@@ -8,22 +8,22 @@ authors = [
 ]
 requires-python = ">=3.14"
 dependencies = [
-    "aiohttp>=3.13.3",
+    "aiohttp>=3.14.3",
     "aiosqlite>=0.22.1",
-    "alembic>=1.18.4",
-    "cryptography>=46.0.5",
-    "discord-py>=2.6.0",
-    "fastapi>=0.129.0",
-    "greenlet>=3.3.2",
+    "alembic>=1.20.0",
+    "cryptography>=50.0.1",
+    "discord-py>=2.7.1",
+    "fastapi>=0.141.1",
+    "greenlet>=3.5.6",
     "httpx>=0.28.1",
-    "pydantic>=2.12.5",
-    "rich>=14.0.0",
-    "pydantic-settings>=2.12.0",
-    "pyjwt>=2.12.1",
-    "slack-bolt>=1.27.0",
-    "slack-sdk>=3.40.0",
-    "sqlalchemy>=2.0.48",
-    "uvicorn[standard]>=0.40.0",
+    "pydantic>=2.13.5",
+    "rich>=15.0.0",
+    "pydantic-settings>=2.15.0",
+    "pyjwt>=2.14.0",
+    "slack-bolt>=1.30.0",
+    "slack-sdk>=3.44.1",
+    "sqlalchemy>=2.0.54",
+    "uvicorn[standard]>=0.53.0",
 ]
 
 [build-system]
@@ -32,19 +32,19 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    "import-linter>=2.11",
-    "pre-commit>=4.5.1",
-    "pytest>=9.0.2",
-    "pytest-asyncio>=1.3.0",
-    "pytest-cov>=7.0.0",
-    "respx>=0.22.0",
-    "ruff>=0.15.1",
-    "time-machine>=3.2.0",
-    "ty>=0.0.17",
+    "import-linter>=2.15",
+    "pre-commit>=4.6.2",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "respx>=0.23.1",
+    "ruff>=0.16.8",
+    "time-machine>=3.5.1",
+    "ty>=0.0.83",
 ]
 docs = [
-    "mkdocs>=1.6,<2",
-    "mkdocs-material>=9.7.6",
+    "mkdocs>=1.6.1,<2",
+    "mkdocs-material>=9.7.7",
 ]
 
 [tool.ruff]
@@ -52,11 +52,89 @@ target-version = "py314"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "UP", "B", "A", "SIM", "ANN"]
+select = ["ALL"]
+ignore = [
+    # Conflicts with the formatter (ruff's own documented incompatibility list).
+    "COM812",
+    "COM819",
+    "ISC001",
+    # Mutually exclusive with D211/D212, which we keep.
+    "D203",
+    "D213",
+    # Docstring *presence* is not mandated; docstring *style* below still is.
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D105",
+    "D106",
+    "D107",
+    # The licence lives in LICENSE, not in a header on every file.
+    "CPY001",
+    # No `if TYPE_CHECKING:` guards. Python 3.14 evaluates annotations lazily
+    # (PEP 649), so they buy nothing here, and any framework that introspects a
+    # signature - slack-bolt, FastAPI - breaks on names that only exist to the
+    # type checker.
+    "TC001",
+    "TC002",
+    "TC003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "S101",     # asserts are the point
+    "PLR2004",  # literal expectations are clearer than named constants
+    "SLF001",   # tests may reach into internals under test
+    "FBT001",   # fakes mirror the signatures they stand in for
+    "FBT003",
+    "ARG001",   # fixtures and fake implementations take unused args
+    "ARG002",
+    "PLR0913",  # fake constructors mirror real ones
+    "PLR0917",
+    "INP001",   # pytest collects these without __init__.py
+]
+"scripts/**" = [
+    "T201",     # these are CLIs; printing is the output
+    "INP001",
+]
+"src/prbot/data/migrations/**" = [
+    "INP001",   # alembic requires these directories stay non-packages
+    "D400",     # the revision header is alembic's template, not prose
+    "D415",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["prbot", "tests"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.ty.rules]
+# Every ty lint at error severity; the exemptions below are scoped, not global.
+all = "error"
+
+[[tool.ty.overrides]]
+# SQLAlchemy's `mapped_column()` is declared as `MappedColumn[Any]` and only
+# becomes `Mapped[T]` through the declarative machinery at runtime, so every
+# column assignment here reads as unsound. Nothing in this file can fix that.
+include = ["src/prbot/data/database.py"]
+
+[tool.ty.overrides.rules]
+unsound-assignment = "ignore"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+]
+filterwarnings = ["error"]
 
 [tool.importlinter]
 root_packages = ["prbot", "tests"]

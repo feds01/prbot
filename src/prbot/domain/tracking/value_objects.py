@@ -1,6 +1,5 @@
-from __future__ import annotations
-
 from enum import StrEnum
+from typing import override
 
 from pydantic import BaseModel
 
@@ -51,6 +50,7 @@ class PRUrl(BaseModel, frozen=True):
     repo: str
     number: int
 
+    @override
     def __str__(self) -> str:
         return f"{self.owner}/{self.repo}#{self.number}"
 

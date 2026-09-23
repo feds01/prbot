@@ -1,5 +1,11 @@
+from collections.abc import AsyncIterator
+
 import pytest
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from prbot.data.database import Base
 from prbot.data.scope_config import ScopeConfigEmojiResolver
@@ -9,16 +15,19 @@ from prbot.domain.emoji.value_objects import EmojiConfig
 
 
 @pytest.fixture
-async def session_factory() -> async_sessionmaker:
+async def session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    return async_sessionmaker(engine, expire_on_commit=False)
+    yield async_sessionmaker(engine, expire_on_commit=False)
+    # Without this the connection is only closed by the garbage collector,
+    # which raises out of `Connection.__del__` after the loop has gone.
+    await engine.dispose()
 
 
 @pytest.fixture
 async def settings_repo(
-    session_factory: async_sessionmaker,
+    session_factory: async_sessionmaker[AsyncSession],
 ) -> SQLiteScopeSettingsRepository:
     return SQLiteScopeSettingsRepository(session_factory=session_factory)
 

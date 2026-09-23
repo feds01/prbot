@@ -21,8 +21,9 @@ logger = logging.getLogger(__name__)
 class HandleGitHubWebhook:
     """Use case: a source webhook fires, update all tracked messages."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - constructor injection: each collaborator is a named port
         self,
+        *,
         source: PRSourcePort,
         reactions: ReactionPort,
         pr_repository: PRRepositoryPort,

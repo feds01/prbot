@@ -60,7 +60,7 @@ def main() -> None:
         block = content[start + len(marker) : end].strip()
 
         # If the block contains only "pass" or is empty, migrations are up to date
-        if block == "" or block == "pass":
+        if block in {"", "pass"}:
             print("OK: migrations are up to date with models")
         else:
             print("FAIL: models have changed without a migration:")

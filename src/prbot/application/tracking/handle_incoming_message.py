@@ -17,8 +17,9 @@ logger = logging.getLogger(__name__)
 class HandleIncomingMessage:
     """Use case: a new message arrives from a messaging platform, check for PR URLs."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - constructor injection: each collaborator is a named port
         self,
+        *,
         sources: Sequence[PRSourcePort],
         reactions: ReactionPort,
         pr_repository: PRRepositoryPort,

@@ -1,3 +1,5 @@
+from typing import override
+
 import pytest
 
 from prbot.application.tracking.handle_github_webhook import HandleGitHubWebhook
@@ -34,9 +36,11 @@ class _FailingPRSource(FakePRSource):
         super().__init__(pr_info)
         self._failing_numbers = failing_numbers
 
+    @override
     async def fetch_pr_info(self, pr_url: PRUrl) -> PRInfo:
         if pr_url.number in self._failing_numbers:
-            raise RuntimeError(f"Simulated failure for PR #{pr_url.number}")
+            msg = f"Simulated failure for PR #{pr_url.number}"
+            raise RuntimeError(msg)
         return await super().fetch_pr_info(pr_url)
 
 
@@ -48,12 +52,12 @@ def _make_use_case(
     exclusions: FakeUserExclusionRepo | None = None,
 ) -> ReconcileTrackedPRs:
     webhook = HandleGitHubWebhook(
-        source,
-        reactions,
-        repo,
-        resolver,
-        exclusions or FakeUserExclusionRepo(),
-        FakeScopeSettingsRepo(),
+        source=source,
+        reactions=reactions,
+        pr_repository=repo,
+        emoji_resolver=resolver,
+        user_exclusions=exclusions or FakeUserExclusionRepo(),
+        scope_settings=FakeScopeSettingsRepo(),
     )
     return ReconcileTrackedPRs(pr_repository=repo, handle_webhook=webhook)
 
@@ -131,7 +135,12 @@ class TestReconcileTrackedPRs:
         source = _FailingPRSource(MERGED_INFO, failing_numbers={2})
         exclusions = FakeUserExclusionRepo()
         webhook = HandleGitHubWebhook(
-            source, reactions, repo, resolver, exclusions, FakeScopeSettingsRepo()
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=FakeScopeSettingsRepo(),
         )
         use_case = ReconcileTrackedPRs(pr_repository=repo, handle_webhook=webhook)
 
@@ -150,6 +159,7 @@ class _RateLimitedPRSource(FakePRSource):
         self._after_calls = after_calls
         self.calls = 0
 
+    @override
     async def fetch_pr_info(self, pr_url: PRUrl) -> PRInfo:
         self.calls += 1
         if self.calls > self._after_calls:

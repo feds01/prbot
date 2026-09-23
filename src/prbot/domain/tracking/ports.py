@@ -42,8 +42,11 @@ class ReactionPort(Protocol):
         emoji: str,
         fallback_emoji: str | None = None,
     ) -> None:
-        """Add a reaction. If the primary emoji fails (e.g. not present in the target
-        guild/workspace), the adapter may retry with `fallback_emoji` when provided."""
+        """Add a reaction to a message.
+
+        If the primary emoji fails (e.g. not present in the target guild or
+        workspace), the adapter may retry with `fallback_emoji` when provided.
+        """
         ...
 
 
