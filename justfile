@@ -42,8 +42,18 @@ check-migrations:
 lint-imports:
     uv run lint-imports
 
-# Run all checks (lint + format-check + typecheck + migrations + import-linter)
-check: lint format-check typecheck check-migrations lint-imports
+# Verify uv.lock is in sync with pyproject.toml
+lock-check:
+    uv lock --check
+
+# Upgrade every locked dependency to its latest compatible release
+upgrade:
+    uv lock --upgrade
+    uv sync --dev
+    uv run pre-commit autoupdate
+
+# Run all checks (same set as CI)
+check: lock-check lint format-check typecheck check-migrations lint-imports
 
 # Seed channel cursors from existing tracked PRs (one-time, after first deploy)
 seed-cursors *args:
