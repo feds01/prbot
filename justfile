@@ -4,7 +4,7 @@ default:
 # Install dependencies and pre-commit hooks
 install:
     uv sync --dev
-    uv run pre-commit install
+    GIT_CONFIG_GLOBAL=/dev/null uv run pre-commit install
 
 # Start FastAPI development server
 dev:
