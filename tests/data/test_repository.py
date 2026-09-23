@@ -1,3 +1,5 @@
+from collections.abc import AsyncIterator
+
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -9,11 +11,14 @@ from prbot.domain.tracking.value_objects import MessageRef, PRUrl
 
 
 @pytest.fixture
-async def session_factory() -> async_sessionmaker:
+async def session_factory() -> AsyncIterator[async_sessionmaker]:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    return async_sessionmaker(engine, expire_on_commit=False)
+    yield async_sessionmaker(engine, expire_on_commit=False)
+    # Without this the connection is only closed by the garbage collector,
+    # which raises out of `Connection.__del__` after the loop has gone.
+    await engine.dispose()
 
 
 @pytest.fixture
