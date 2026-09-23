@@ -6,8 +6,6 @@ command here translates its typed parameters into the positional
 `(subcommand, args, scope_keys)` tuple the dispatcher expects.
 """
 
-from __future__ import annotations
-
 import logging
 from collections.abc import Callable
 from typing import Literal

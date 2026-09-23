@@ -11,8 +11,6 @@ plain strings (Slack mrkdwn). Integration layers only parse raw input
 into (subcommand, args, scope_keys) and display the result.
 """
 
-from __future__ import annotations
-
 import logging
 from typing import Protocol
 

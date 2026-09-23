@@ -11,8 +11,6 @@ Usage:
 Emoji images are read from the docs/images/emojis/ directory relative to this script.
 """
 
-from __future__ import annotations
-
 import argparse
 import base64
 import sys
