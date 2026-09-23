@@ -1,14 +1,10 @@
 import re
-from typing import TYPE_CHECKING
+from collections.abc import Sequence
 
 from prbot.domain.emoji.value_objects import EmojiConfig
 from prbot.domain.exclusions.ports import GitHubUserKind, GitHubUserRef
+from prbot.domain.tracking.entities import TrackedPR
 from prbot.domain.tracking.value_objects import MessageRef, PRInfo, PRUrl
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
-
-    from prbot.domain.tracking.entities import TrackedPR
 
 _GITHUB_PR_PATTERN = re.compile(r"github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)")
 

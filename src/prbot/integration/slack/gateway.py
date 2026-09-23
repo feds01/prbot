@@ -1,17 +1,14 @@
 import logging
 import time
 import unicodedata
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+
+from slack_sdk.web.async_client import AsyncWebClient
 
 from prbot.application.tracking.backfill_missed_messages import HistoryItem
 from prbot.domain.tracking.value_objects import MessageRef
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
-
-    from slack_sdk.web.async_client import AsyncWebClient
 
 logger = logging.getLogger(__name__)
 

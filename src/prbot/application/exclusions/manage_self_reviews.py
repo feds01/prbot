@@ -4,10 +4,7 @@ When the flag is set at a scope, prbot skips the ``commented`` emoji reaction
 if the PR author is the same person who just commented on their own PR.
 """
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from prbot.domain.common.ports import ScopeSettingsPort
+from prbot.domain.common.ports import ScopeSettingsPort
 
 MUTE_SELF_REVIEWS_KEY = "mute_self_reviews"
 

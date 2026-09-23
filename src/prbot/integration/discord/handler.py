@@ -1,27 +1,24 @@
 import asyncio
 import logging
 import re
-from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
 
+from prbot.application.commands import CommandDispatcher
 from prbot.application.tracking.backfill_missed_messages import (
     BackfillMissedMessages,
     ChannelDescriptor,
 )
+from prbot.application.tracking.handle_incoming_message import HandleIncomingMessage
+from prbot.config import DiscordConfig
+from prbot.domain.tracking.ports import ChannelCursorPort, ReactionPort
 from prbot.integration.discord.commands import register_commands
 from prbot.integration.discord.gateway import (
     INTEGRATION_ID,
     DiscordGateway,
     encode_ref,
 )
-
-if TYPE_CHECKING:
-    from prbot.application.commands import CommandDispatcher
-    from prbot.application.tracking.handle_incoming_message import HandleIncomingMessage
-    from prbot.config import DiscordConfig
-    from prbot.domain.tracking.ports import ChannelCursorPort, ReactionPort
 
 logger = logging.getLogger(__name__)
 

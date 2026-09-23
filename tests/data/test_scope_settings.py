@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from collections.abc import AsyncIterator
 
 import pytest
 from sqlalchemy.ext.asyncio import (
@@ -12,9 +12,6 @@ from prbot.data.scope_config import ScopeConfigEmojiResolver
 from prbot.data.scope_settings import SQLiteScopeSettingsRepository
 from prbot.data.user_exclusions import SQLiteUserExclusionRepository
 from prbot.domain.emoji.value_objects import EmojiConfig
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
 
 
 @pytest.fixture

@@ -1,11 +1,6 @@
-from typing import TYPE_CHECKING
+from collections.abc import Sequence
 
-from prbot.domain.tracking.value_objects import CheckRun, PRInfo, PRStatus, ReviewState
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
-
-    from prbot.domain.tracking.value_objects import Review
+from prbot.domain.tracking.value_objects import CheckRun, PRInfo, PRStatus, Review, ReviewState
 
 # check-run conclusions that count as a CI failure.
 _FAILING_CI_CONCLUSIONS = frozenset({"failure", "timed_out", "startup_failure", "action_required"})

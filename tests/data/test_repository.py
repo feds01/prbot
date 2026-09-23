@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from collections.abc import AsyncIterator
 
 import pytest
 from sqlalchemy import text
@@ -12,9 +12,6 @@ from prbot.data.database import Base
 from prbot.data.repository import SQLiteChannelCursorRepository, SQLitePRRepository
 from prbot.domain.tracking.entities import TrackedPR
 from prbot.domain.tracking.value_objects import MessageRef, PRUrl
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
 
 
 @pytest.fixture

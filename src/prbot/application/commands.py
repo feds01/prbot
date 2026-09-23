@@ -14,16 +14,15 @@ into (subcommand, args, scope_keys) and display the result.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
-if TYPE_CHECKING:
-    from prbot.application.exclusions.manage_self_reviews import ManageSelfReviews
-    from prbot.application.exclusions.manage_user_exclusions import (
-        ExclusionEntry,
-        ExclusionResult,
-        ManageUserExclusions,
-    )
-    from prbot.domain.emoji.ports import EmojiConfigResolverPort
+from prbot.application.exclusions.manage_self_reviews import ManageSelfReviews
+from prbot.application.exclusions.manage_user_exclusions import (
+    ExclusionEntry,
+    ExclusionResult,
+    ManageUserExclusions,
+)
+from prbot.domain.emoji.ports import EmojiConfigResolverPort
 
 logger = logging.getLogger(__name__)
 

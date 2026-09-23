@@ -1,8 +1,11 @@
 import logging
-from typing import TYPE_CHECKING
 
 from prbot.application.exclusions.manage_self_reviews import MUTE_SELF_REVIEWS_KEY
 from prbot.application.tracking.reaction_manager import ReactionManager
+from prbot.domain.common.ports import ScopeSettingsPort
+from prbot.domain.emoji.ports import EmojiConfigResolverPort
+from prbot.domain.emoji.value_objects import EmojiConfig
+from prbot.domain.exclusions.ports import UserExclusionPort
 from prbot.domain.tracking.ports import (
     PRRepositoryPort,
     PRSourcePort,
@@ -11,12 +14,6 @@ from prbot.domain.tracking.ports import (
 )
 from prbot.domain.tracking.status_resolver import filter_pr_info, resolve_pr_status
 from prbot.domain.tracking.value_objects import PRStatus, PRUrl
-
-if TYPE_CHECKING:
-    from prbot.domain.common.ports import ScopeSettingsPort
-    from prbot.domain.emoji.ports import EmojiConfigResolverPort
-    from prbot.domain.emoji.value_objects import EmojiConfig
-    from prbot.domain.exclusions.ports import UserExclusionPort
 
 logger = logging.getLogger(__name__)
 

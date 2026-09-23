@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 
+from prbot.domain.common.ports import ScopeSettingsPort
 from prbot.domain.emoji.value_objects import EmojiConfig
-
-if TYPE_CHECKING:
-    from prbot.domain.common.ports import ScopeSettingsPort
 
 logger = logging.getLogger(__name__)
 

@@ -72,6 +72,13 @@ ignore = [
     "D107",
     # The licence lives in LICENSE, not in a header on every file.
     "CPY001",
+    # No `if TYPE_CHECKING:` guards. Python 3.14 evaluates annotations lazily
+    # (PEP 649), so they buy nothing here, and any framework that introspects a
+    # signature - slack-bolt, FastAPI - breaks on names that only exist to the
+    # type checker.
+    "TC001",
+    "TC002",
+    "TC003",
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -95,14 +102,6 @@ ignore = [
     "INP001",   # alembic requires these directories stay non-packages
     "D400",     # the revision header is alembic's template, not prose
     "D415",
-]
-
-[tool.ruff.lint.flake8-type-checking]
-# Pydantic and pydantic-settings resolve annotations at runtime, so their
-# imports must not be moved into `if TYPE_CHECKING` blocks.
-runtime-evaluated-base-classes = [
-    "pydantic.BaseModel",
-    "pydantic_settings.BaseSettings",
 ]
 
 [tool.ruff.lint.isort]

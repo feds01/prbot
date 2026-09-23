@@ -1,10 +1,6 @@
-from typing import TYPE_CHECKING
-
 from prbot.domain.emoji.value_objects import EmojiConfig
+from prbot.domain.tracking.entities import TrackedPR
 from prbot.domain.tracking.value_objects import PRInfo, PRStatus
-
-if TYPE_CHECKING:
-    from prbot.domain.tracking.entities import TrackedPR
 
 
 def ci_emoji_to_add(

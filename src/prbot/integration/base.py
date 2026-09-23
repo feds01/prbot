@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
-if TYPE_CHECKING:
-    from fastapi import FastAPI
+from fastapi import FastAPI
 
-    from prbot.domain.tracking.ports import ReactionPort
-    from prbot.domain.tracking.value_objects import MessageRef
+from prbot.domain.tracking.ports import ReactionPort
+from prbot.domain.tracking.value_objects import MessageRef
 
 
 class IntegrationHandler(Protocol):

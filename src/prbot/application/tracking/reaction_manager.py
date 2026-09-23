@@ -1,14 +1,11 @@
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from prbot.application.tracking.ci_emoji import ci_emoji_to_add
 from prbot.domain.emoji.value_objects import EmojiConfig
-
-if TYPE_CHECKING:
-    from prbot.domain.tracking.entities import TrackedPR
-    from prbot.domain.tracking.ports import ReactionPort
-    from prbot.domain.tracking.value_objects import MessageRef, PRInfo, PRStatus
+from prbot.domain.tracking.entities import TrackedPR
+from prbot.domain.tracking.ports import ReactionPort
+from prbot.domain.tracking.value_objects import MessageRef, PRInfo, PRStatus
 
 logger = logging.getLogger(__name__)
 

@@ -13,13 +13,10 @@ The old tables are left in place so this migration can be rolled back
 by dropping only the new table; they are removed in a later migration.
 """
 
-from typing import TYPE_CHECKING
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
 
 revision: str = "e5f6a7b8c9da"
 down_revision: str | Sequence[str] | None = "d4e5f6a7b8c9"

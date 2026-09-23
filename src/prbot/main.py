@@ -1,8 +1,8 @@
 import asyncio
 import logging
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from http import HTTPStatus
-from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, HTTPException, Request
 
@@ -41,9 +41,6 @@ from prbot.integration.slack.gateway import INTEGRATION_ID as SLACK_INTEGRATION_
 from prbot.integration.slack.gateway import encode_ref
 from prbot.integration.slack.gateway import seed_cursor as slack_seed_cursor
 from prbot.integration.slack.handler import SlackIntegration, build_scope_keys
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Awaitable, Callable
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

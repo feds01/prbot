@@ -1,14 +1,11 @@
 import logging
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
 
 import discord
 
 from prbot.application.tracking.backfill_missed_messages import HistoryItem
 from prbot.domain.tracking.value_objects import MessageRef
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
 
 logger = logging.getLogger(__name__)
 

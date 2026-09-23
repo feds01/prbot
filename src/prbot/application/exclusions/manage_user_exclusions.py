@@ -2,14 +2,12 @@
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from prbot.domain.exclusions.ports import (
-        GitHubUserLookupPort,
-        GitHubUserRef,
-        UserExclusionPort,
-    )
+from prbot.domain.exclusions.ports import (
+    GitHubUserLookupPort,
+    GitHubUserRef,
+    UserExclusionPort,
+)
 
 logger = logging.getLogger(__name__)
 

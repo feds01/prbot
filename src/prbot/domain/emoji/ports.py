@@ -1,7 +1,6 @@
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
-if TYPE_CHECKING:
-    from prbot.domain.emoji.value_objects import EmojiConfig
+from prbot.domain.emoji.value_objects import EmojiConfig
 
 
 class EmojiConfigResolverPort(Protocol):

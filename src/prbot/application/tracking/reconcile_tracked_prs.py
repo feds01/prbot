@@ -1,13 +1,10 @@
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
 
+from prbot.application.tracking.handle_github_webhook import HandleGitHubWebhook
 from prbot.domain.tracking.ports import PRRepositoryPort, SourceRateLimitError
-
-if TYPE_CHECKING:
-    from prbot.application.tracking.handle_github_webhook import HandleGitHubWebhook
-    from prbot.domain.tracking.value_objects import PRUrl
+from prbot.domain.tracking.value_objects import PRUrl
 
 logger = logging.getLogger(__name__)
 

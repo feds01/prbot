@@ -3,13 +3,10 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
+from prbot.application.tracking.handle_incoming_message import HandleIncomingMessage
+from prbot.domain.tracking.ports import ChannelCursorPort
 from prbot.domain.tracking.value_objects import MessageRef
-
-if TYPE_CHECKING:
-    from prbot.application.tracking.handle_incoming_message import HandleIncomingMessage
-    from prbot.domain.tracking.ports import ChannelCursorPort
 
 logger = logging.getLogger(__name__)
 

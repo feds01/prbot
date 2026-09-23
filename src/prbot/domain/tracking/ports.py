@@ -1,10 +1,8 @@
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from collections.abc import Sequence
+from typing import Protocol, runtime_checkable
 
-if TYPE_CHECKING:
-    from collections.abc import Sequence
-
-    from prbot.domain.tracking.entities import TrackedPR
-    from prbot.domain.tracking.value_objects import MessageRef, PRInfo, PRUrl
+from prbot.domain.tracking.entities import TrackedPR
+from prbot.domain.tracking.value_objects import MessageRef, PRInfo, PRUrl
 
 
 class SourceRateLimitError(Exception):

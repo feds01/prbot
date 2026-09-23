@@ -10,13 +10,12 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 import discord
 from discord import app_commands
 
-if TYPE_CHECKING:
-    from prbot.application.commands import CommandDispatcher
+from prbot.application.commands import CommandDispatcher
 
 logger = logging.getLogger(__name__)
 
