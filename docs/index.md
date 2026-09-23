@@ -23,7 +23,7 @@ sequenceDiagram
     prbot->>Chat: Update emoji reaction
 ```
 
-1. A user posts (or forwards) a message containing a GitHub PR URL
+1. A user posts or forwards a message containing a GitHub PR URL
 2. The bot detects the URL, fetches the PR status from GitHub, and adds an emoji reaction
 3. When the PR is updated (opened, closed, reviewed, etc.), a GitHub webhook notifies the bot
 4. The bot updates the emoji on all messages tracking that PR
