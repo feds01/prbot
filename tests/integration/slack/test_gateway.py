@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from prbot.domain.tracking.value_objects import MessageRef
-from prbot.integration.slack.gateway import SlackGateway, encode_ref
+from prbot.integration.slack.gateway import SlackGateway, encode_ref, message_text
 
 
 @pytest.fixture
@@ -85,3 +85,54 @@ class TestSlackGateway:
         mock_client.reactions_add.assert_awaited_once_with(
             channel="C123", timestamp="1234.5678", name="ci_failed"
         )
+
+
+_PR_URL = "https://github.com/acme/widgets/pull/42"
+
+
+def _forward(text: str, *, is_share: bool = True) -> dict[str, object]:
+    """Build a shared-message attachment, as Slack attaches it to a forwarded message."""
+    return {"is_share": is_share, "is_msg_unfurl": True, "text": text}
+
+
+class TestMessageText:
+    def test_plain_message(self) -> None:
+        assert message_text({"text": f"<{_PR_URL}>"}) == f"<{_PR_URL}>"
+
+    def test_forward_without_comment(self) -> None:
+        msg = {"text": "", "attachments": [_forward(f"<{_PR_URL}>")]}
+        assert message_text(msg) == f"<{_PR_URL}>"
+
+    def test_forward_with_comment(self) -> None:
+        msg = {"text": "can someone look?", "attachments": [_forward(f"<{_PR_URL}>")]}
+        assert message_text(msg) == f"can someone look?\n<{_PR_URL}>"
+
+    def test_ignores_non_shared_attachments(self) -> None:
+        # Link unfurls and app attachments aren't forwards; a PR URL inside one
+        # was never posted by a person.
+        msg = {"text": "see docs", "attachments": [_forward(f"<{_PR_URL}>", is_share=False)]}
+        assert message_text(msg) == "see docs"
+
+    def test_tolerates_malformed_attachments(self) -> None:
+        assert message_text({"text": "hi", "attachments": "nope"}) == "hi"
+        assert message_text({"text": "hi", "attachments": ["nope"]}) == "hi"
+
+    def test_empty_message(self) -> None:
+        assert message_text({}) == ""
+
+
+class TestFetchChannelHistory:
+    async def test_yields_forwarded_message_with_empty_text(
+        self, gateway: SlackGateway, mock_client: AsyncMock
+    ) -> None:
+        mock_client.conversations_history.return_value = {
+            "messages": [
+                {"ts": "1.0", "text": "", "attachments": [_forward(f"<{_PR_URL}>")]},
+                {"ts": "2.0", "text": ""},
+            ],
+            "has_more": False,
+        }
+
+        items = [item async for item in gateway.fetch_channel_history("C123", "T1")]
+
+        assert [(item.ts, item.text) for item in items] == [("1.0", f"<{_PR_URL}>")]

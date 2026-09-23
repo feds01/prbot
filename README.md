@@ -8,7 +8,7 @@ A bot that watches for GitHub PR URLs in your messages and reacts with emoji ref
 
 ### Features
 
-- **Automatic PR detection** — spots GitHub PR links in your messages, no commands needed
+- **Automatic PR detection** — spots GitHub PR links in your messages, including forwarded ones, no commands needed
 - **Live status emoji** — reacts with an emoji that reflects the current PR state (open, approved, merged, etc.)
 - **Real-time updates** — emoji updates automatically when the PR status changes via GitHub webhooks
 - **Multi-platform** — works with Slack, Discord, and designed to support more integrations
