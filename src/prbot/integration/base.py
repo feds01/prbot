@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
-from fastapi import FastAPI
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
-from prbot.domain.tracking.ports import ReactionPort
-from prbot.domain.tracking.value_objects import MessageRef
+    from prbot.domain.tracking.ports import ReactionPort
+    from prbot.domain.tracking.value_objects import MessageRef
 
 
 class IntegrationHandler(Protocol):
@@ -53,7 +54,8 @@ class IntegrationRegistry:
     ) -> None:
         handler = self._handlers.get(message_ref.integration_id)
         if handler is None:
-            raise ValueError(f"No integration registered for '{message_ref.integration_id}'")
+            msg = f"No integration registered for '{message_ref.integration_id}'"
+            raise ValueError(msg)
         await handler.reaction_port().add_reaction(message_ref, emoji, fallback_emoji)
 
     def register_all_routes(self, app: FastAPI) -> None:

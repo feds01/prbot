@@ -2,6 +2,7 @@ import logging
 import re
 import time
 from datetime import datetime
+from http import HTTPStatus
 
 import httpx
 import jwt
@@ -24,12 +25,18 @@ _GITHUB_PR_PATTERN = re.compile(r"github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)")
 # the token cannot change it, so it is not worth a retry.
 _PERMISSION_DENIED = "Resource not accessible by integration"
 
+# GitHub's maximum page size; a short page means we reached the last one.
+_PAGE_SIZE = 100
+
 logger = logging.getLogger(__name__)
 
 
 def _is_rate_limited(resp: httpx.Response) -> bool:
     """GitHub answers 403 — not 429 — once the hourly budget is spent."""
-    return resp.status_code == 403 and resp.headers.get("x-ratelimit-remaining") == "0"
+    return bool(
+        resp.status_code == HTTPStatus.FORBIDDEN
+        and resp.headers.get("x-ratelimit-remaining") == "0"
+    )
 
 
 def _reset_at(resp: httpx.Response) -> float | None:
@@ -45,9 +52,9 @@ def _looks_like_bad_credentials(resp: httpx.Response) -> bool:
     A rate-limit 403 must not qualify: the budget belongs to the installation,
     not the token, so retrying on a new one only spends the deficit twice.
     """
-    if resp.status_code == 401:
+    if resp.status_code == HTTPStatus.UNAUTHORIZED:
         return True
-    if resp.status_code != 403:
+    if resp.status_code != HTTPStatus.FORBIDDEN:
         return False
     return not _is_rate_limited(resp) and _PERMISSION_DENIED not in resp.text
 
@@ -89,14 +96,14 @@ class GitHubGateway:
             f"/orgs/{owner}/installation",
             headers={"Authorization": f"Bearer {token}"},
         )
-        if resp.status_code == 404:
+        if resp.status_code == HTTPStatus.NOT_FOUND:
             # Try as a user installation
             resp = await self._client.get(
                 f"/users/{owner}/installation",
                 headers={"Authorization": f"Bearer {token}"},
             )
         resp.raise_for_status()
-        installation_id: int = resp.json()["id"]
+        installation_id = int(resp.json()["id"])
         self._installation_cache[owner] = installation_id
         return installation_id
 
@@ -114,7 +121,7 @@ class GitHubGateway:
         )
         resp.raise_for_status()
         data = resp.json()
-        token: str = data["token"]
+        token = str(data["token"])
         expires_at = datetime.fromisoformat(data["expires_at"]).timestamp()
         self._token_cache[installation_id] = (token, expires_at)
         logger.info("Obtained installation token for %s (installation %d)", owner, installation_id)
@@ -196,20 +203,17 @@ class GitHubGateway:
             rev_resp = await self._authed_get(
                 pr_url.owner,
                 f"{pr_path}/reviews",
-                {"per_page": 100, "page": page},
+                {"per_page": _PAGE_SIZE, "page": page},
             )
             rev_resp.raise_for_status()
             page_data = rev_resp.json()
             if not page_data:
                 break
-            for r in page_data:
-                reviews.append(
-                    Review(
-                        user_login=r["user"]["login"],
-                        state=ReviewState(r["state"]),
-                    )
-                )
-            if len(page_data) < 100:
+            reviews.extend(
+                Review(user_login=r["user"]["login"], state=ReviewState(r["state"]))
+                for r in page_data
+            )
+            if len(page_data) < _PAGE_SIZE:
                 break
             page += 1
 
@@ -246,7 +250,7 @@ class GitHubGateway:
                 resp = await self._authed_get(
                     pr_url.owner,
                     f"/repos/{pr_url.owner}/{pr_url.repo}/commits/{head_sha}/check-runs",
-                    {"per_page": 100, "page": page},
+                    {"per_page": _PAGE_SIZE, "page": page},
                     log_errors=False,
                 )
                 resp.raise_for_status()
@@ -255,13 +259,13 @@ class GitHubGateway:
                     CheckRun(status=r.get("status", ""), conclusion=r.get("conclusion"))
                     for r in page_runs
                 )
-                if len(page_runs) < 100:
+                if len(page_runs) < _PAGE_SIZE:
                     break
                 page += 1
         except SourceRateLimitError:
             raise
-        except Exception:
-            logger.warning("Failed to fetch check-runs for %s@%s", pr_url, head_sha[:7])
+        except Exception:  # CI status is advisory; never fail a sync over it
+            logger.exception("Failed to fetch check-runs for %s@%s", pr_url, head_sha[:7])
             return ()
 
         return tuple(runs)
@@ -275,7 +279,7 @@ class GitHubGateway:
             return None
 
         resp = await self._client.get(f"/users/{stripped}")
-        if resp.status_code == 404:
+        if resp.status_code == HTTPStatus.NOT_FOUND:
             return None
         resp.raise_for_status()
         data = resp.json()
@@ -288,7 +292,7 @@ class GitHubGateway:
         """Resolve a GitHub bot via the public apps API."""
         # /apps/{slug} is public and rejects app JWTs scoped to a different app.
         resp = await self._client.get(f"/apps/{github_app_name}")
-        if resp.status_code == 404:
+        if resp.status_code == HTTPStatus.NOT_FOUND:
             return None
         resp.raise_for_status()
         return GitHubUserRef(login=github_app_name, kind="bot")

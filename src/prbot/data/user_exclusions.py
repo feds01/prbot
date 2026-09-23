@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
-from prbot.domain.common.ports import ScopeSettingsPort
+if TYPE_CHECKING:
+    from prbot.domain.common.ports import ScopeSettingsPort
 
 logger = logging.getLogger(__name__)
 

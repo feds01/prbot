@@ -1,10 +1,14 @@
 import re
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from prbot.domain.emoji.value_objects import EmojiConfig
 from prbot.domain.exclusions.ports import GitHubUserKind, GitHubUserRef
-from prbot.domain.tracking.entities import TrackedPR
 from prbot.domain.tracking.value_objects import MessageRef, PRInfo, PRUrl
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from prbot.domain.tracking.entities import TrackedPR
 
 _GITHUB_PR_PATTERN = re.compile(r"github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)")
 
@@ -153,7 +157,7 @@ class FakeUserExclusionRepo:
     async def list_excluded(self, scope_keys: list[str]) -> dict[str, list[str]]:
         grouped: dict[str, list[str]] = {}
         for key in scope_keys:
-            if key in self._exclusions and self._exclusions[key]:
+            if self._exclusions.get(key):
                 grouped[key] = sorted(self._exclusions[key])
         return grouped
 
@@ -185,5 +189,6 @@ class FakeGitHubUserLookup:
             key = key[: -len("[bot]")]
         key_l = key.lower()
         if key_l in self._raise_for:
-            raise RuntimeError("simulated GitHub lookup failure")
+            msg = "simulated GitHub lookup failure"
+            raise RuntimeError(msg)
         return self._refs.get(key_l)

@@ -12,10 +12,13 @@ Downgrade recreates the empty tables so the earlier migration's
 backfill SQL can re-run cleanly, but the original row data is gone.
 """
 
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
 from alembic import op
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 revision: str = "f6a7b8c9daeb"
 down_revision: str | Sequence[str] | None = "e5f6a7b8c9da"

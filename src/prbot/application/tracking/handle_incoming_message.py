@@ -1,15 +1,19 @@
 import logging
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from prbot.application.exclusions.manage_self_reviews import MUTE_SELF_REVIEWS_KEY
 from prbot.application.tracking.reaction_manager import ReactionManager
-from prbot.domain.common.ports import ScopeSettingsPort
-from prbot.domain.emoji.ports import EmojiConfigResolverPort
-from prbot.domain.exclusions.ports import UserExclusionPort
 from prbot.domain.tracking.entities import TrackedPR
-from prbot.domain.tracking.ports import PRRepositoryPort, PRSourcePort, ReactionPort
 from prbot.domain.tracking.status_resolver import filter_pr_info, resolve_pr_status
-from prbot.domain.tracking.value_objects import MessageRef
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from prbot.domain.common.ports import ScopeSettingsPort
+    from prbot.domain.emoji.ports import EmojiConfigResolverPort
+    from prbot.domain.exclusions.ports import UserExclusionPort
+    from prbot.domain.tracking.ports import PRRepositoryPort, PRSourcePort, ReactionPort
+    from prbot.domain.tracking.value_objects import MessageRef
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +21,9 @@ logger = logging.getLogger(__name__)
 class HandleIncomingMessage:
     """Use case: a new message arrives from a messaging platform, check for PR URLs."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - constructor injection: each collaborator is a named port
         self,
+        *,
         sources: Sequence[PRSourcePort],
         reactions: ReactionPort,
         pr_repository: PRRepositoryPort,

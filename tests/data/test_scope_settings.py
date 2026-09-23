@@ -1,7 +1,11 @@
-from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
 import pytest
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from prbot.data.database import Base
 from prbot.data.scope_config import ScopeConfigEmojiResolver
@@ -9,9 +13,12 @@ from prbot.data.scope_settings import SQLiteScopeSettingsRepository
 from prbot.data.user_exclusions import SQLiteUserExclusionRepository
 from prbot.domain.emoji.value_objects import EmojiConfig
 
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
 
 @pytest.fixture
-async def session_factory() -> AsyncIterator[async_sessionmaker]:
+async def session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -23,7 +30,7 @@ async def session_factory() -> AsyncIterator[async_sessionmaker]:
 
 @pytest.fixture
 async def settings_repo(
-    session_factory: async_sessionmaker,
+    session_factory: async_sessionmaker[AsyncSession],
 ) -> SQLiteScopeSettingsRepository:
     return SQLiteScopeSettingsRepository(session_factory=session_factory)
 

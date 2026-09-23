@@ -1,6 +1,6 @@
 import time
-from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import time_machine
 
@@ -20,6 +20,9 @@ from tests.conftest import (
     FakeScopeSettingsRepo,
     FakeUserExclusionRepo,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 
 def _build_ref(channel: str, ts: str) -> MessageRef:
@@ -164,7 +167,8 @@ class TestBackfillMissedMessages:
         backfill = _make_backfill(cursor_repo)
 
         async def unreachable(ch: ChannelDescriptor, oldest: str) -> AsyncIterator[HistoryItem]:
-            raise AssertionError("Should not be called")
+            msg = "Should not be called"
+            raise AssertionError(msg)
             yield
 
         await backfill.execute(channels=[], fetch_history=unreachable)

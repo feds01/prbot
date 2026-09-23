@@ -85,7 +85,8 @@ class TestTopLevelDispatcher:
     async def test_config_unknown_domain_shows_help(self, dispatcher: CommandDispatcher) -> None:
         result = await dispatcher.dispatch("config", ["nonsense"], SCOPE_KEYS)
         assert "Unknown config domain" in result
-        assert "exclusions" in result and "self-reviews" in result
+        assert "exclusions" in result
+        assert "self-reviews" in result
 
 
 class TestExclusionsDomain:
@@ -122,7 +123,9 @@ class TestExclusionsDomain:
     async def test_bare_domain_returns_help(self, dispatcher: CommandDispatcher) -> None:
         result = await dispatcher.dispatch("config", ["exclusions"], SCOPE_KEYS)
         assert "*Exclusions*" in result
-        assert "add" in result and "remove" in result and "list" in result
+        assert "add" in result
+        assert "remove" in result
+        assert "list" in result
 
     async def test_unknown_action_shows_domain_help(self, dispatcher: CommandDispatcher) -> None:
         result = await dispatcher.dispatch("config", ["exclusions", "bonk"], SCOPE_KEYS)
@@ -251,8 +254,10 @@ class TestExclusionsCheck:
 
 
 class TestTopLevelDomains:
-    """Domains are registered as top-level Commands — /prbot exclusions add ...
-    works the same as /prbot config exclusions add ... (backward compat).
+    """Domains are registered as top-level Commands.
+
+    /prbot exclusions add ... works the same as /prbot config exclusions add ...
+    (backward compat).
     """
 
     async def test_exclusions_add_at_top_level(self, dispatcher: CommandDispatcher) -> None:

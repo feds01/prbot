@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     github_private_key: str
     github_webhook_secret: str
     database_path: str = "data/pr_bot.db"
-    host: str = "0.0.0.0"
+    host: str = "0.0.0.0"  # noqa: S104 - the container publishes the port, not the process
     port: int = 8080
     emoji: EmojiConfig = EmojiConfig()
     # How far back startup reconciliation looks. Each PR costs several GitHub

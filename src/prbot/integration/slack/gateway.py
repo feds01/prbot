@@ -1,14 +1,17 @@
 import logging
 import time
 import unicodedata
-from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from enum import StrEnum
-
-from slack_sdk.web.async_client import AsyncWebClient
+from typing import TYPE_CHECKING
 
 from prbot.application.tracking.backfill_missed_messages import HistoryItem
 from prbot.domain.tracking.value_objects import MessageRef
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
+    from slack_sdk.web.async_client import AsyncWebClient
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +130,6 @@ class SlackGateway:
                 timestamp=timestamp,
                 name=self._resolve_emoji_name(emoji),
             )
-            return True
         except Exception as exc:
             match self._slack_error_code(str(exc)):
                 case SlackErrorCode.ALREADY_REACTED:
@@ -145,6 +147,8 @@ class SlackGateway:
                     raise _MessageGoneError from exc
                 case _:
                     raise
+        else:
+            return True
 
     async def list_bot_channels(self) -> list[ChannelInfo]:
         """List all channels the bot is a member of, using cursor-based pagination."""
@@ -158,20 +162,20 @@ class SlackGateway:
                 limit=200,
                 cursor=cursor,
             )
-            for ch in resp.get("channels", []):
-                channels.append(
-                    ChannelInfo(
-                        id=ch["id"],
-                        team_id=ch.get("shared_team_ids", [ch.get("context_team_id", "")])[0]
-                        if ch.get("shared_team_ids")
-                        else ch.get("context_team_id", ""),
-                    )
+            channels.extend(
+                ChannelInfo(
+                    id=ch["id"],
+                    team_id=ch.get("shared_team_ids", [ch.get("context_team_id", "")])[0]
+                    if ch.get("shared_team_ids")
+                    else ch.get("context_team_id", ""),
                 )
+                for ch in resp.get("channels", [])
+            )
 
             next_cursor = resp.get("response_metadata", {}).get("next_cursor", "")
             if not next_cursor:
                 break
-            cursor = next_cursor
+            cursor = str(next_cursor)
 
         return channels
 
@@ -202,9 +206,9 @@ class SlackGateway:
                         team_id=team_id,
                     )
 
-            if not resp.get("has_more", False):
+            if not resp.get("has_more"):
                 break
             next_cursor = resp.get("response_metadata", {}).get("next_cursor", "")
             if not next_cursor:
                 break
-            cursor = next_cursor
+            cursor = str(next_cursor)

@@ -62,7 +62,12 @@ class TestHandleIncomingMessage:
     ) -> None:
         source = FakePRSource(_open_pr())
         use_case = HandleIncomingMessage(
-            [source], reactions, repo, resolver, exclusions, scope_settings
+            sources=[source],
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute(_msg_ref(), "Check https://github.com/o/r/pull/1")
@@ -81,7 +86,12 @@ class TestHandleIncomingMessage:
     ) -> None:
         source = FakePRSource(_open_pr())
         use_case = HandleIncomingMessage(
-            [source], reactions, repo, resolver, exclusions, scope_settings
+            sources=[source],
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute(_msg_ref(), "Just a normal message")
@@ -99,7 +109,12 @@ class TestHandleIncomingMessage:
     ) -> None:
         source = FakePRSource(_approved_pr())
         use_case = HandleIncomingMessage(
-            [source], reactions, repo, resolver, exclusions, scope_settings
+            sources=[source],
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         text = "See github.com/o/r/pull/1 and github.com/o/r/pull/2"
@@ -118,7 +133,12 @@ class TestHandleIncomingMessage:
     ) -> None:
         source = FakePRSource(_approved_pr())
         use_case = HandleIncomingMessage(
-            [source], reactions, repo, resolver, exclusions, scope_settings
+            sources=[source],
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         text = "github.com/o/r/pull/1 and github.com/o/r/pull/1 again"
@@ -136,7 +156,12 @@ class TestHandleIncomingMessage:
     ) -> None:
         source = FakePRSource(_approved_pr())
         use_case = HandleIncomingMessage(
-            [source], reactions, repo, resolver, exclusions, scope_settings
+            sources=[source],
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute(_msg_ref(), "github.com/o/r/pull/1")
@@ -153,7 +178,12 @@ class TestHandleIncomingMessage:
     ) -> None:
         source = FakePRSource(_approved_pr())
         use_case = HandleIncomingMessage(
-            [source], reactions, repo, resolver, exclusions, scope_settings
+            sources=[source],
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute(_msg_ref(), "github.com/o/r/pull/1")
@@ -172,7 +202,12 @@ class TestHandleIncomingMessage:
     ) -> None:
         source = FakePRSource(_approved_pr())
         use_case = HandleIncomingMessage(
-            [source], reactions, repo, resolver, exclusions, scope_settings
+            sources=[source],
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute(_msg_ref(), "github.com/o/r/pull/1")
@@ -195,7 +230,12 @@ class TestHandleIncomingMessage:
         source = FakePRSource(_approved_pr())
         custom_resolver = FakeEmojiConfigResolver(EmojiConfig(approved="shipit"))
         use_case = HandleIncomingMessage(
-            [source], reactions, repo, custom_resolver, exclusions, scope_settings
+            sources=[source],
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=custom_resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute(_msg_ref(), "github.com/o/r/pull/1")
@@ -221,7 +261,12 @@ class TestHandleIncomingMessage:
         source = FakePRSource(pr_with_cursor_comment)
         await exclusions.add("slack/T1", "cursor[bot]")
         use_case = HandleIncomingMessage(
-            [source], reactions, repo, resolver, exclusions, scope_settings
+            sources=[source],
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute(
@@ -253,7 +298,12 @@ class TestHandleIncomingMessage:
         source = FakePRSource(pr_with_self_comment)
         await scope_settings.set("slack/T1", "mute_self_reviews", True)
         use_case = HandleIncomingMessage(
-            [source], reactions, repo, resolver, exclusions, scope_settings
+            sources=[source],
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute(
@@ -277,7 +327,12 @@ class TestHandleIncomingMessage:
         # the CI emoji even though there is no review-status emoji.
         source = FakePRSource(PRInfo(state="open", merged=False, reviews=(), ci_failing=True))
         use_case = HandleIncomingMessage(
-            [source], reactions, repo, resolver, exclusions, scope_settings
+            sources=[source],
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute(_msg_ref(), "github.com/o/r/pull/1")
@@ -302,7 +357,12 @@ class TestHandleIncomingMessage:
             )
         )
         use_case = HandleIncomingMessage(
-            [source], reactions, repo, resolver, exclusions, scope_settings
+            sources=[source],
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute(_msg_ref(), "github.com/o/r/pull/1")
@@ -322,7 +382,12 @@ class TestHandleIncomingMessage:
     ) -> None:
         source = FakePRSource(PRInfo(state="open", merged=False, reviews=(), ci_failing=ci_failing))
         use_case = HandleIncomingMessage(
-            [source], reactions, repo, resolver, exclusions, scope_settings
+            sources=[source],
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute(_msg_ref(), "github.com/o/r/pull/1")
@@ -352,7 +417,12 @@ class TestHandleIncomingMessage:
         source = FakePRSource(pr)
         await scope_settings.set("slack/T1", "mute_self_reviews", True)
         use_case = HandleIncomingMessage(
-            [source], reactions, repo, resolver, exclusions, scope_settings
+            sources=[source],
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
         )
 
         await use_case.execute(

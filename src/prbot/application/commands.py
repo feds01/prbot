@@ -14,15 +14,16 @@ into (subcommand, args, scope_keys) and display the result.
 from __future__ import annotations
 
 import logging
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
-from prbot.application.exclusions.manage_self_reviews import ManageSelfReviews
-from prbot.application.exclusions.manage_user_exclusions import (
-    ExclusionEntry,
-    ExclusionResult,
-    ManageUserExclusions,
-)
-from prbot.domain.emoji.ports import EmojiConfigResolverPort
+if TYPE_CHECKING:
+    from prbot.application.exclusions.manage_self_reviews import ManageSelfReviews
+    from prbot.application.exclusions.manage_user_exclusions import (
+        ExclusionEntry,
+        ExclusionResult,
+        ManageUserExclusions,
+    )
+    from prbot.domain.emoji.ports import EmojiConfigResolverPort
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,9 @@ _SCOPE_LEVELS: dict[str, int] = {
     "workspace": 1,
 }
 _SCOPE_LABEL_BY_INDEX: tuple[str, ...] = ("channel", "workspace", "global")
+
+# `<username> [scope]` — the scope argument is the only optional one.
+_MAX_USER_COMMAND_ARGS = 2
 
 
 def _resolve_scope(scope_keys: list[str], scope_arg: str | None) -> str | None:
@@ -204,10 +208,10 @@ class ExclusionsDomain:
         return "\n".join(lines)
 
     async def _add(self, args: list[str], scope_keys: list[str]) -> str:
-        if not args or len(args) > 2:
+        if not args or len(args) > _MAX_USER_COMMAND_ARGS:
             return "Usage: `add <username> [channel|workspace]`"
         username = args[0]
-        scope_arg = args[1] if len(args) == 2 else None
+        scope_arg = args[1] if len(args) == _MAX_USER_COMMAND_ARGS else None
         if (scope_key := _resolve_scope(scope_keys, scope_arg)) is None:
             return _unknown_scope(scope_arg)
         result = await self._manage.exclude_user(scope_key, username)
@@ -221,10 +225,10 @@ class ExclusionsDomain:
         return primary
 
     async def _remove(self, args: list[str], scope_keys: list[str]) -> str:
-        if not args or len(args) > 2:
+        if not args or len(args) > _MAX_USER_COMMAND_ARGS:
             return "Usage: `remove <username> [channel|workspace]`"
         username = args[0]
-        scope_arg = args[1] if len(args) == 2 else None
+        scope_arg = args[1] if len(args) == _MAX_USER_COMMAND_ARGS else None
         if (scope_key := _resolve_scope(scope_keys, scope_arg)) is None:
             return _unknown_scope(scope_arg)
         result = await self._manage.include_user(scope_key, username)
@@ -265,8 +269,9 @@ class ExclusionsDomain:
                 continue
             label = _label_for_scope(scope_keys, scope_key).capitalize()
             lines.append(f"• *{label}* (`{scope_key}`):")
-            for entry in entries:
-                lines.append(f"    • `{entry.username}` — {_format_check_marker(entry)}")
+            lines.extend(
+                f"    • `{entry.username}` — {_format_check_marker(entry)}" for entry in entries
+            )
         return "\n".join(lines)
 
 
@@ -403,9 +408,11 @@ class EmojiDomain:
 
 
 class ShowConfigCommand:
-    """Renders a summary across all domains and provides a backward-compat routing
-    layer so existing ``/prbot config <domain> <action>`` invocations keep working
-    after the domains were promoted to top-level Commands."""
+    """Render a summary across all domains, and route legacy invocations.
+
+    The routing layer keeps existing ``/prbot config <domain> <action>`` calls
+    working after the domains were promoted to top-level Commands.
+    """
 
     name = "config"
     aliases: tuple[str, ...] = ()
@@ -427,9 +434,9 @@ class ShowConfigCommand:
         lines: list[str] = []
         if scope_keys:
             lines.append(f"*Scope:* `{scope_keys[0]}`")
-        for domain in self._ordered:
-            if section := await domain.summary(scope_keys):
-                lines.append(section)
+        lines.extend(
+            [section for domain in self._ordered if (section := await domain.summary(scope_keys))]
+        )
         lines.append("")
         lines.append("Type `/prbot <domain>` to see available actions.")
         return "\n".join(lines)
@@ -485,8 +492,7 @@ class CommandDispatcher:
 
     def _help_text(self) -> str:
         lines = ["*prbot commands*", ""]
-        for cmd in self._ordered:
-            lines.append(f"• {cmd.usage}")
+        lines.extend(f"• {cmd.usage}" for cmd in self._ordered)
         return "\n".join(lines)
 
 

@@ -1,10 +1,13 @@
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
-from prbot.application.tracking.handle_github_webhook import HandleGitHubWebhook
 from prbot.domain.tracking.ports import PRRepositoryPort, SourceRateLimitError
-from prbot.domain.tracking.value_objects import PRUrl
+
+if TYPE_CHECKING:
+    from prbot.application.tracking.handle_github_webhook import HandleGitHubWebhook
+    from prbot.domain.tracking.value_objects import PRUrl
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +92,10 @@ class ReconcileTrackedPRs:
         )
 
     async def _reconcile_one(self, semaphore: asyncio.Semaphore, pr_url: PRUrl) -> bool | None:
-        """True if evaluated, False if skipped, None if the budget ran out."""
+        """Reconcile one PR.
+
+        Returns True if evaluated, False if skipped, None if the budget ran out.
+        """
         async with semaphore:
             logger.debug("Reconciling %s", pr_url)
             try:

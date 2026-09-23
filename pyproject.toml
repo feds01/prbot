@@ -52,11 +52,90 @@ target-version = "py314"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "UP", "B", "A", "SIM", "ANN"]
+select = ["ALL"]
+ignore = [
+    # Conflicts with the formatter (ruff's own documented incompatibility list).
+    "COM812",
+    "COM819",
+    "ISC001",
+    # Mutually exclusive with D211/D212, which we keep.
+    "D203",
+    "D213",
+    # Docstring *presence* is not mandated; docstring *style* below still is.
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D105",
+    "D106",
+    "D107",
+    # The licence lives in LICENSE, not in a header on every file.
+    "CPY001",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "S101",     # asserts are the point
+    "PLR2004",  # literal expectations are clearer than named constants
+    "SLF001",   # tests may reach into internals under test
+    "FBT001",   # fakes mirror the signatures they stand in for
+    "FBT003",
+    "ARG001",   # fixtures and fake implementations take unused args
+    "ARG002",
+    "PLR0913",  # fake constructors mirror real ones
+    "PLR0917",
+    "INP001",   # pytest collects these without __init__.py
+]
+"scripts/**" = [
+    "T201",     # these are CLIs; printing is the output
+    "INP001",
+]
+"src/prbot/data/migrations/**" = [
+    "INP001",   # alembic requires these directories stay non-packages
+    "D400",     # the revision header is alembic's template, not prose
+    "D415",
+]
+
+[tool.ruff.lint.flake8-type-checking]
+# Pydantic and pydantic-settings resolve annotations at runtime, so their
+# imports must not be moved into `if TYPE_CHECKING` blocks.
+runtime-evaluated-base-classes = [
+    "pydantic.BaseModel",
+    "pydantic_settings.BaseSettings",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["prbot", "tests"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.ty.rules]
+# Every ty lint at error severity; the exemptions below are scoped, not global.
+all = "error"
+
+[[tool.ty.overrides]]
+# SQLAlchemy's `mapped_column()` is declared as `MappedColumn[Any]` and only
+# becomes `Mapped[T]` through the declarative machinery at runtime, so every
+# column assignment here reads as unsound. Nothing in this file can fix that.
+include = ["src/prbot/data/database.py"]
+
+[tool.ty.overrides.rules]
+unsound-assignment = "ignore"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+]
+filterwarnings = ["error"]
 
 [tool.importlinter]
 root_packages = ["prbot", "tests"]

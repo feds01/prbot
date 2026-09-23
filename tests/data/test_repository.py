@@ -1,17 +1,24 @@
-from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from prbot.data.database import Base
 from prbot.data.repository import SQLiteChannelCursorRepository, SQLitePRRepository
 from prbot.domain.tracking.entities import TrackedPR
 from prbot.domain.tracking.value_objects import MessageRef, PRUrl
 
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
 
 @pytest.fixture
-async def session_factory() -> AsyncIterator[async_sessionmaker]:
+async def session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -22,12 +29,14 @@ async def session_factory() -> AsyncIterator[async_sessionmaker]:
 
 
 @pytest.fixture
-async def repository(session_factory: async_sessionmaker) -> SQLitePRRepository:
+async def repository(session_factory: async_sessionmaker[AsyncSession]) -> SQLitePRRepository:
     return SQLitePRRepository(session_factory=session_factory)
 
 
 @pytest.fixture
-async def cursor_repository(session_factory: async_sessionmaker) -> SQLiteChannelCursorRepository:
+async def cursor_repository(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> SQLiteChannelCursorRepository:
     return SQLiteChannelCursorRepository(session_factory=session_factory)
 
 
@@ -152,7 +161,7 @@ class TestSQLiteChannelCursorRepository:
 
     async def test_seed_from_tracked_prs(
         self,
-        session_factory: async_sessionmaker,
+        session_factory: async_sessionmaker[AsyncSession],
         cursor_repository: SQLiteChannelCursorRepository,
     ) -> None:
         # Insert some tracked PRs with message_refs in channel:ts format
@@ -170,7 +179,7 @@ class TestSQLiteChannelCursorRepository:
 
     async def test_seed_skips_channels_with_existing_cursor(
         self,
-        session_factory: async_sessionmaker,
+        session_factory: async_sessionmaker[AsyncSession],
         cursor_repository: SQLiteChannelCursorRepository,
     ) -> None:
         pr_repo = SQLitePRRepository(session_factory=session_factory)
@@ -186,7 +195,9 @@ class TestSQLiteChannelCursorRepository:
         assert await cursor_repository.get_cursor("slack", "C1") == "500.000000"
 
 
-async def _set_activity(session_factory: async_sessionmaker, number: int, stamp: str) -> None:
+async def _set_activity(
+    session_factory: async_sessionmaker[AsyncSession], number: int, stamp: str
+) -> None:
     """Rewrite a row's server-set updated_at so ordering can be asserted."""
     async with session_factory() as session:
         await session.execute(
@@ -198,7 +209,7 @@ async def _set_activity(session_factory: async_sessionmaker, number: int, stamp:
 
 class TestDistinctPRUrlOrdering:
     async def test_orders_by_most_recent_activity(
-        self, repository: SQLitePRRepository, session_factory: async_sessionmaker
+        self, repository: SQLitePRRepository, session_factory: async_sessionmaker[AsyncSession]
     ) -> None:
         await repository.save(_tracked(number=1, channel="C1", ts="1.0"))
         await repository.save(_tracked(number=2, channel="C2", ts="2.0"))
@@ -212,7 +223,7 @@ class TestDistinctPRUrlOrdering:
         assert [r.number for r in results] == [2, 3, 1]
 
     async def test_since_excludes_stale_prs(
-        self, repository: SQLitePRRepository, session_factory: async_sessionmaker
+        self, repository: SQLitePRRepository, session_factory: async_sessionmaker[AsyncSession]
     ) -> None:
         await repository.save(_tracked(number=1, channel="C1", ts="1.0"))
         await repository.save(_tracked(number=2, channel="C2", ts="2.0"))
@@ -224,7 +235,7 @@ class TestDistinctPRUrlOrdering:
         assert [r.number for r in results] == [2]
 
     async def test_a_pr_is_as_recent_as_its_newest_message(
-        self, repository: SQLitePRRepository, session_factory: async_sessionmaker
+        self, repository: SQLitePRRepository, session_factory: async_sessionmaker[AsyncSession]
     ) -> None:
         # One PR tracked twice: the stale copy must not drag it out of the window.
         await repository.save(_tracked(number=1, channel="C1", ts="1.0"))

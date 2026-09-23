@@ -10,12 +10,13 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import discord
 from discord import app_commands
 
-from prbot.application.commands import CommandDispatcher
+if TYPE_CHECKING:
+    from prbot.application.commands import CommandDispatcher
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +26,28 @@ ScopeChoice = Literal["channel", "workspace"]
 ScopeKeysFn = Callable[..., list[str]]
 
 
+async def _dispatch(
+    dispatcher: CommandDispatcher, subcommand: str, args: list[str], scope_keys: list[str]
+) -> str:
+    """Dispatch a command, turning any failure into a user-facing message."""
+    try:
+        return await dispatcher.dispatch(subcommand, args, scope_keys)
+    except Exception:
+        logger.exception("Error handling /prbot %s %s", subcommand, args)
+        return "Something went wrong processing that command."
+
+
+def _args(action: str, scope: ScopeChoice | None) -> list[str]:
+    """Build dispatcher args; an unset scope is omitted so it resolves as inherited."""
+    return [action] if scope is None else [action, scope]
+
+
 def register_commands(
     tree: app_commands.CommandTree,
     dispatcher: CommandDispatcher,
     build_scope_keys: ScopeKeysFn,
 ) -> None:
     """Register /prbot slash commands on the given tree."""
-
     prbot = app_commands.Group(
         name="prbot",
         description="PR bot configuration",
@@ -58,11 +74,7 @@ def register_commands(
             guild=str(interaction.guild_id or ""),
             channel=str(interaction.channel_id or ""),
         )
-        try:
-            response = await dispatcher.dispatch(subcommand, args, scope_keys)
-        except Exception:
-            logger.exception("Error handling /prbot %s %s", subcommand, args)
-            response = "Something went wrong processing that command."
+        response = await _dispatch(dispatcher, subcommand, args, scope_keys)
         await interaction.followup.send(content=response, ephemeral=True)
 
     @exclusions.command(name="add", description="Exclude a GitHub user from PR status updates")
@@ -89,10 +101,7 @@ def register_commands(
         interaction: discord.Interaction,
         scope: ScopeChoice | None = None,
     ) -> None:
-        args = ["list"]
-        if scope is not None:
-            args.append(scope)
-        await run(interaction, "exclusions", args)
+        await run(interaction, "exclusions", _args("list", scope))
 
     @exclusions.command(name="check", description="Re-verify excluded GitHub users against GitHub")
     @app_commands.describe(scope="Scope to check (default: show inherited)")
@@ -100,10 +109,7 @@ def register_commands(
         interaction: discord.Interaction,
         scope: ScopeChoice | None = None,
     ) -> None:
-        args = ["check"]
-        if scope is not None:
-            args.append(scope)
-        await run(interaction, "exclusions", args)
+        await run(interaction, "exclusions", _args("check", scope))
 
     @self_reviews.command(name="mute", description="Mute reactions on the author's self-reviews")
     @app_commands.describe(scope="Scope to apply the mute at")
@@ -127,10 +133,7 @@ def register_commands(
         interaction: discord.Interaction,
         scope: ScopeChoice | None = None,
     ) -> None:
-        args = ["status"]
-        if scope is not None:
-            args.append(scope)
-        await run(interaction, "self-reviews", args)
+        await run(interaction, "self-reviews", _args("status", scope))
 
     @emoji.command(name="status", description="Show the effective emoji config")
     @app_commands.describe(scope="Scope to query (default: show inherited)")
@@ -138,9 +141,6 @@ def register_commands(
         interaction: discord.Interaction,
         scope: ScopeChoice | None = None,
     ) -> None:
-        args = ["status"]
-        if scope is not None:
-            args.append(scope)
-        await run(interaction, "emoji", args)
+        await run(interaction, "emoji", _args("status", scope))
 
     tree.add_command(prbot)

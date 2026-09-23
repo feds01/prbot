@@ -1,14 +1,18 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.sqlite import insert
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from prbot.data.database import ChannelCursorRow, TrackedPRRow
 from prbot.domain.tracking.entities import TrackedPR
 from prbot.domain.tracking.value_objects import MessageRef, PRUrl
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
 class SQLitePRRepository:
@@ -207,7 +211,7 @@ def _serialize_emojis(emojis: frozenset[str]) -> str:
 
 def _deserialize_emojis(value: str | None) -> frozenset[str]:
     if not value:
-        return frozenset()
+        return frozenset[str]()
     return frozenset(value.split(","))
 
 

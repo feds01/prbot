@@ -1,8 +1,10 @@
-from collections.abc import Sequence
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from prbot.domain.tracking.entities import TrackedPR
-from prbot.domain.tracking.value_objects import MessageRef, PRInfo, PRUrl
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from prbot.domain.tracking.entities import TrackedPR
+    from prbot.domain.tracking.value_objects import MessageRef, PRInfo, PRUrl
 
 
 class SourceRateLimitError(Exception):
@@ -42,8 +44,11 @@ class ReactionPort(Protocol):
         emoji: str,
         fallback_emoji: str | None = None,
     ) -> None:
-        """Add a reaction. If the primary emoji fails (e.g. not present in the target
-        guild/workspace), the adapter may retry with `fallback_emoji` when provided."""
+        """Add a reaction to a message.
+
+        If the primary emoji fails (e.g. not present in the target guild or
+        workspace), the adapter may retry with `fallback_emoji` when provided.
+        """
         ...
 
 

@@ -4,7 +4,10 @@ When the flag is set at a scope, prbot skips the ``commented`` emoji reaction
 if the PR author is the same person who just commented on their own PR.
 """
 
-from prbot.domain.common.ports import ScopeSettingsPort
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from prbot.domain.common.ports import ScopeSettingsPort
 
 MUTE_SELF_REVIEWS_KEY = "mute_self_reviews"
 
@@ -20,7 +23,7 @@ class ManageSelfReviews:
         current = await self._settings.get([scope_key], MUTE_SELF_REVIEWS_KEY)
         if current:
             return False
-        await self._settings.set(scope_key, MUTE_SELF_REVIEWS_KEY, True)
+        await self._settings.set(scope_key, MUTE_SELF_REVIEWS_KEY, value=True)
         return True
 
     async def unmute(self, scope_key: str) -> bool:

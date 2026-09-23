@@ -1,23 +1,31 @@
 import logging
 import re
+from typing import TYPE_CHECKING
 
-from fastapi import FastAPI, Request
+from fastapi import Request  # noqa: TC002 - FastAPI resolves route annotations at import
 from slack_bolt.adapter.fastapi.async_handler import AsyncSlackRequestHandler
 from slack_bolt.async_app import AsyncApp
-from slack_bolt.context.ack.async_ack import AsyncAck
-from slack_bolt.context.respond.async_respond import AsyncRespond
-from slack_sdk.web.async_client import AsyncWebClient
-from starlette.responses import Response
 
-from prbot.application.commands import CommandDispatcher
+# slack-bolt inspects a listener's signature when it is registered, so these
+# must resolve at runtime even though they are only ever used as annotations.
+from slack_bolt.context.ack.async_ack import AsyncAck  # noqa: TC002
+from slack_bolt.context.respond.async_respond import AsyncRespond  # noqa: TC002
+from slack_sdk.web.async_client import AsyncWebClient
+from starlette.responses import Response  # noqa: TC002 - see Request above
+
 from prbot.application.tracking.backfill_missed_messages import (
     BackfillMissedMessages,
     ChannelDescriptor,
 )
-from prbot.application.tracking.handle_incoming_message import HandleIncomingMessage
-from prbot.config import SlackConfig
-from prbot.domain.tracking.ports import ChannelCursorPort, ReactionPort
 from prbot.integration.slack.gateway import INTEGRATION_ID, SlackGateway, encode_ref
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+
+    from prbot.application.commands import CommandDispatcher
+    from prbot.application.tracking.handle_incoming_message import HandleIncomingMessage
+    from prbot.config import SlackConfig
+    from prbot.domain.tracking.ports import ChannelCursorPort, ReactionPort
 
 logger = logging.getLogger(__name__)
 

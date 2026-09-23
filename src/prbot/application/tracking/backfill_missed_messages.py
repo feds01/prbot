@@ -3,10 +3,13 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from prbot.application.tracking.handle_incoming_message import HandleIncomingMessage
-from prbot.domain.tracking.ports import ChannelCursorPort
 from prbot.domain.tracking.value_objects import MessageRef
+
+if TYPE_CHECKING:
+    from prbot.application.tracking.handle_incoming_message import HandleIncomingMessage
+    from prbot.domain.tracking.ports import ChannelCursorPort
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +44,9 @@ SeedCursorFn = Callable[[], str]
 class BackfillMissedMessages:
     """Use case: on startup, scan channel history for messages missed during downtime."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - constructor injection: each collaborator is a named port
         self,
+        *,
         integration_id: str,
         cursor_repo: ChannelCursorPort,
         handle_incoming_message: HandleIncomingMessage,
@@ -107,8 +111,7 @@ class BackfillMissedMessages:
                         exc_info=True,
                     )
 
-                if item.ts > latest_ts:
-                    latest_ts = item.ts
+                latest_ts = max(latest_ts, item.ts)
                 count += 1
 
             # Advance cursor: to latest message if any, otherwise to now

@@ -1,12 +1,17 @@
 """Application-layer operations for managing GitHub user exclusions per scope."""
 
+import logging
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from prbot.domain.exclusions.ports import (
-    GitHubUserLookupPort,
-    GitHubUserRef,
-    UserExclusionPort,
-)
+if TYPE_CHECKING:
+    from prbot.domain.exclusions.ports import (
+        GitHubUserLookupPort,
+        GitHubUserRef,
+        UserExclusionPort,
+    )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -92,5 +97,6 @@ class ManageUserExclusions:
             return None, False
         try:
             return await self._lookup.lookup_user(github_username), False
-        except Exception:
+        except Exception:  # a lookup outage must not block an exclusion
+            logger.exception("GitHub user lookup failed for %r", github_username)
             return None, True

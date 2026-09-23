@@ -1,11 +1,14 @@
 import logging
-from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import discord
 
 from prbot.application.tracking.backfill_missed_messages import HistoryItem
 from prbot.domain.tracking.value_objects import MessageRef
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 logger = logging.getLogger(__name__)
 
@@ -80,19 +83,24 @@ class DiscordGateway:
                 emoji,
             )
 
+    # Discord JSON error codes: https://discord.com/developers/docs/topics/opcodes-and-status-codes
+    _MAX_REACTIONS = 30010
+    _UNKNOWN_EMOJI = 10014
+
     async def _try_react(self, message: discord.Message, emoji: str) -> bool:
         """Add a reaction, swallowing benign failures. Returns True on success."""
         try:
             await message.add_reaction(self._resolve_emoji(emoji))
-            return True
         except discord.HTTPException as exc:
-            if exc.code == 30010:
+            if exc.code == self._MAX_REACTIONS:
                 logger.debug("Max reactions reached for message %d", message.id)
                 return True
-            if exc.code == 10014:
+            if exc.code == self._UNKNOWN_EMOJI:
                 logger.warning("Unknown emoji %r in guild for message %d", emoji, message.id)
                 return False
             raise
+        else:
+            return True
 
     def list_bot_guilds(self) -> list[discord.Guild]:
         """Return all guilds the bot is currently in."""
