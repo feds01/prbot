@@ -1,7 +1,7 @@
 import logging
 import time
 import unicodedata
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -29,6 +29,24 @@ def decode_ref(message_ref: MessageRef) -> tuple[str, str]:
     """Decode a Slack MessageRef into (channel, timestamp)."""
     channel, ts = message_ref.ref.split(":", 1)
     return channel, ts
+
+
+def message_text(message: Mapping[str, object]) -> str:
+    """Return the text to scan for PR URLs: the message's own plus any it forwards.
+
+    A forwarded message carries only the forwarder's (often empty) comment in
+    ``text``; the original message's text arrives as an attachment flagged
+    ``is_share``.
+    """
+    parts = [str(message.get("text") or "")]
+    attachments = message.get("attachments")
+    if isinstance(attachments, list):
+        parts.extend(
+            str(attachment.get("text") or "")
+            for attachment in attachments
+            if isinstance(attachment, dict) and attachment.get("is_share")
+        )
+    return "\n".join(part for part in parts if part)
 
 
 @dataclass(frozen=True)
@@ -193,7 +211,7 @@ class SlackGateway:
                 cursor=cursor,
             )
             for msg in resp.get("messages", []):
-                text = msg.get("text", "")
+                text = message_text(msg)
                 ts = msg.get("ts", "")
                 if text and ts:
                     yield HistoryItem(

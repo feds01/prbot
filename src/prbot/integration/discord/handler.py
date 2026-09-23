@@ -18,6 +18,7 @@ from prbot.integration.discord.gateway import (
     INTEGRATION_ID,
     DiscordGateway,
     encode_ref,
+    message_text,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,7 +67,7 @@ class DiscordIntegration:
             if message.author.bot or message.guild is None:
                 return
 
-            text = message.content
+            text = message_text(message)
             channel_id = str(message.channel.id)
             message_id = str(message.id)
             guild_id = str(message.guild.id)

@@ -1,5 +1,9 @@
+from unittest.mock import MagicMock
+
+import discord
+
 from prbot.domain.tracking.value_objects import MessageRef
-from prbot.integration.discord.gateway import INTEGRATION_ID, decode_ref, encode_ref
+from prbot.integration.discord.gateway import INTEGRATION_ID, decode_ref, encode_ref, message_text
 
 
 class TestEncodeDecodeRef:
@@ -20,3 +24,27 @@ class TestEncodeDecodeRef:
         channel_id, message_id = decode_ref(ref)
         assert channel_id == int(original_channel)
         assert message_id == int(original_message)
+
+
+_PR_URL = "https://github.com/acme/widgets/pull/42"
+
+
+def _message(content: str, *snapshot_contents: str) -> MagicMock:
+    message = MagicMock(spec=discord.Message)
+    message.content = content
+    message.message_snapshots = [
+        MagicMock(spec=discord.MessageSnapshot, content=c) for c in snapshot_contents
+    ]
+    return message
+
+
+class TestMessageText:
+    def test_plain_message(self) -> None:
+        assert message_text(_message(_PR_URL)) == _PR_URL
+
+    def test_forwarded_message(self) -> None:
+        # A forward has empty content; the original lives in the snapshot.
+        assert message_text(_message("", _PR_URL)) == _PR_URL
+
+    def test_empty_message(self) -> None:
+        assert message_text(_message("")) == ""

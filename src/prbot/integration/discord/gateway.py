@@ -28,6 +28,19 @@ def decode_ref(message_ref: MessageRef) -> tuple[int, int]:
     return int(channel_str), int(message_str)
 
 
+def message_text(message: discord.Message) -> str:
+    """Return the text to scan for PR URLs: the message's own plus any it forwards.
+
+    A forwarded message has empty ``content``; the original message's content
+    arrives in ``message_snapshots``.
+    """
+    parts: list[str] = [
+        message.content,
+        *(snapshot.content for snapshot in message.message_snapshots),
+    ]
+    return "\n".join(part for part in parts if part)
+
+
 class DiscordGateway:
     """Concrete adapter: manages Discord emoji reactions via the Discord API."""
 
@@ -138,7 +151,7 @@ class DiscordGateway:
             if message.author.bot:
                 continue
             yield HistoryItem(
-                text=message.content,
+                text=message_text(message),
                 ts=str(message.id),
                 channel_id=channel_id,
                 team_id=team_id,
