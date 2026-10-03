@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 import unicodedata
 from collections.abc import AsyncIterator, Mapping
@@ -13,6 +14,10 @@ from prbot.domain.tracking.value_objects import MessageRef
 logger = logging.getLogger(__name__)
 
 INTEGRATION_ID = "slack"
+
+# A Slack message permalink, https://<workspace>.slack.com/archives/<channel>/p<ts>,
+# where <ts> is the message timestamp with its decimal point dropped.
+_PERMALINK_REGEX = re.compile(r"slack\.com/archives/([A-Z0-9]+)/p(\d{10})(\d{6})")
 
 
 def encode_ref(channel: str, ts: str) -> MessageRef:
@@ -165,6 +170,36 @@ class SlackGateway:
         else:
             return True
 
+    async def resolve_text(self, message: Mapping[str, object]) -> str:
+        """Return ``message_text`` plus the text of each Slack message it links to.
+
+        Bumping a PR by posting a link to the message that announced it reads
+        like a forward, but Slack attaches no ``is_share`` copy of the original,
+        so the linked message has to be fetched. Links are followed one level.
+        """
+        text = message_text(message)
+        links = dict.fromkeys(
+            (channel, f"{seconds}.{micros}")
+            for channel, seconds, micros in _PERMALINK_REGEX.findall(text)
+        )
+        linked = [await self._linked_message_text(channel, ts) for channel, ts in links]
+        return "\n".join(part for part in [text, *linked] if part)
+
+    async def _linked_message_text(self, channel: str, ts: str) -> str:
+        """Return the text of the message at *channel*/*ts*, or "" if it can't be read."""
+        try:
+            # conversations.replies also finds thread replies, which
+            # conversations.history doesn't; it may return the thread's parent too.
+            resp = await self._client.conversations_replies(
+                channel=channel, ts=ts, oldest=ts, latest=ts, inclusive=True
+            )
+        except Exception:
+            logger.warning("Could not read linked message %s:%s", channel, ts, exc_info=True)
+            return ""
+        return next(
+            (message_text(msg) for msg in resp.get("messages", []) if msg.get("ts") == ts), ""
+        )
+
     async def list_bot_channels(self) -> list[ChannelInfo]:
         """List all channels the bot is a member of, using cursor-based pagination."""
         channels: list[ChannelInfo] = []
@@ -211,7 +246,7 @@ class SlackGateway:
                 cursor=cursor,
             )
             for msg in resp.get("messages", []):
-                text = message_text(msg)
+                text = await self.resolve_text(msg)
                 ts = msg.get("ts", "")
                 if text and ts:
                     yield HistoryItem(
