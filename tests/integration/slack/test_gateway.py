@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from slack_sdk.errors import SlackApiError
 
 from prbot.domain.tracking.value_objects import MessageRef
 from prbot.integration.slack.gateway import SlackGateway, encode_ref, message_text
@@ -108,8 +109,8 @@ class TestMessageText:
         assert message_text(msg) == f"can someone look?\n<{_PR_URL}>"
 
     def test_ignores_non_shared_attachments(self) -> None:
-        # Link unfurls and app attachments aren't forwards; a PR URL inside one
-        # was never posted by a person.
+        # Link unfurls and app attachments aren't forwards. A linked Slack message
+        # is read by fetching it (see TestResolveText), not from its unfurl.
         msg = {"text": "see docs", "attachments": [_forward(f"<{_PR_URL}>", is_share=False)]}
         assert message_text(msg) == "see docs"
 
@@ -119,6 +120,86 @@ class TestMessageText:
 
     def test_empty_message(self) -> None:
         assert message_text({}) == ""
+
+
+_LINKED_TS = "1700000000.123456"
+_PERMALINK = "https://acme.slack.com/archives/C456/p1700000000123456"
+
+
+class TestResolveText:
+    async def test_follows_link_to_another_message(
+        self, gateway: SlackGateway, mock_client: AsyncMock
+    ) -> None:
+        mock_client.conversations_replies.return_value = {
+            "messages": [{"ts": _LINKED_TS, "text": f"<{_PR_URL}>"}]
+        }
+
+        text = await gateway.resolve_text({"text": f":pr-bump: <{_PERMALINK}>"})
+
+        assert text == f":pr-bump: <{_PERMALINK}>\n<{_PR_URL}>"
+        mock_client.conversations_replies.assert_awaited_once_with(
+            channel="C456", ts=_LINKED_TS, oldest=_LINKED_TS, latest=_LINKED_TS, inclusive=True
+        )
+
+    async def test_reads_each_linked_message_once(
+        self, gateway: SlackGateway, mock_client: AsyncMock
+    ) -> None:
+        mock_client.conversations_replies.return_value = {"messages": []}
+
+        await gateway.resolve_text({"text": f"<{_PERMALINK}> <{_PERMALINK}|again>"})
+
+        mock_client.conversations_replies.assert_awaited_once()
+
+    async def test_picks_linked_reply_out_of_its_thread(
+        self, gateway: SlackGateway, mock_client: AsyncMock
+    ) -> None:
+        mock_client.conversations_replies.return_value = {
+            "messages": [
+                {"ts": "1690000000.000001", "text": "thread parent"},
+                {"ts": _LINKED_TS, "text": f"<{_PR_URL}>"},
+            ]
+        }
+
+        text = await gateway.resolve_text({"text": f"<{_PERMALINK}>"})
+
+        assert text == f"<{_PERMALINK}>\n<{_PR_URL}>"
+
+    async def test_reads_forward_in_linked_message(
+        self, gateway: SlackGateway, mock_client: AsyncMock
+    ) -> None:
+        mock_client.conversations_replies.return_value = {
+            "messages": [{"ts": _LINKED_TS, "text": "", "attachments": [_forward(f"<{_PR_URL}>")]}]
+        }
+
+        text = await gateway.resolve_text({"text": f"<{_PERMALINK}>"})
+
+        assert text == f"<{_PERMALINK}>\n<{_PR_URL}>"
+
+    async def test_follows_links_one_level_only(
+        self, gateway: SlackGateway, mock_client: AsyncMock
+    ) -> None:
+        other = "https://acme.slack.com/archives/C789/p1600000000000001"
+        mock_client.conversations_replies.return_value = {
+            "messages": [{"ts": _LINKED_TS, "text": f"<{other}>"}]
+        }
+
+        text = await gateway.resolve_text({"text": f"<{_PERMALINK}>"})
+
+        assert text == f"<{_PERMALINK}>\n<{other}>"
+        mock_client.conversations_replies.assert_awaited_once()
+
+    async def test_skips_unreadable_link(
+        self, gateway: SlackGateway, mock_client: AsyncMock
+    ) -> None:
+        mock_client.conversations_replies.side_effect = SlackApiError(
+            "not_in_channel", {"ok": False, "error": "not_in_channel"}
+        )
+
+        assert await gateway.resolve_text({"text": f"<{_PERMALINK}>"}) == f"<{_PERMALINK}>"
+
+    async def test_no_links_no_lookups(self, gateway: SlackGateway, mock_client: AsyncMock) -> None:
+        assert await gateway.resolve_text({"text": f"<{_PR_URL}>"}) == f"<{_PR_URL}>"
+        mock_client.conversations_replies.assert_not_awaited()
 
 
 class TestFetchChannelHistory:
@@ -136,3 +217,18 @@ class TestFetchChannelHistory:
         items = [item async for item in gateway.fetch_channel_history("C123", "T1")]
 
         assert [(item.ts, item.text) for item in items] == [("1.0", f"<{_PR_URL}>")]
+
+    async def test_yields_message_linking_to_a_pr_message(
+        self, gateway: SlackGateway, mock_client: AsyncMock
+    ) -> None:
+        mock_client.conversations_history.return_value = {
+            "messages": [{"ts": "1.0", "text": f"<{_PERMALINK}>"}],
+            "has_more": False,
+        }
+        mock_client.conversations_replies.return_value = {
+            "messages": [{"ts": _LINKED_TS, "text": f"<{_PR_URL}>"}]
+        }
+
+        items = [item async for item in gateway.fetch_channel_history("C123", "T1")]
+
+        assert [item.text for item in items] == [f"<{_PERMALINK}>\n<{_PR_URL}>"]

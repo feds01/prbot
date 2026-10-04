@@ -17,12 +17,7 @@ from prbot.application.tracking.backfill_missed_messages import (
 from prbot.application.tracking.handle_incoming_message import HandleIncomingMessage
 from prbot.config import SlackConfig
 from prbot.domain.tracking.ports import ChannelCursorPort, ReactionPort
-from prbot.integration.slack.gateway import (
-    INTEGRATION_ID,
-    SlackGateway,
-    encode_ref,
-    message_text,
-)
+from prbot.integration.slack.gateway import INTEGRATION_ID, SlackGateway, encode_ref
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +52,7 @@ class SlackIntegration:
     def _setup_events(self) -> None:
         @self._bolt_app.event("message")
         async def on_message(event: dict[str, object]) -> None:
-            text = message_text(event)
+            text = await self._gateway.resolve_text(event)
             channel = str(event.get("channel", ""))
             ts = str(event.get("ts", ""))
             team = str(event.get("team", ""))

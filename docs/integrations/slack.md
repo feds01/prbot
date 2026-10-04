@@ -123,6 +123,8 @@ After installation, invite the bot to channels where you want PR tracking:
 
 The bot will automatically detect GitHub PR URLs in messages and add emoji reactions.
 
+It also follows links to other Slack messages: a message that only links to one containing a PR URL — to bump the PR, say — gets the same reactions. The bot must be in the linked message's channel to read it.
+
 ## Slash commands
 
 prbot registers a `/prbot` slash command for managing configuration (e.g. excluding users from triggering emoji updates). The command is included in the app manifest above — no additional setup needed.
