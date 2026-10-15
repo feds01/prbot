@@ -138,6 +138,30 @@ class TestGitHubGateway:
         assert info.reviews[1].state == ReviewState.CHANGES_REQUESTED
 
     @respx.mock
+    async def test_fetch_pr_with_requested_reviewers(
+        self, gateway: GitHubGateway, pr_url: PRUrl
+    ) -> None:
+        _mock_installation_and_token()
+        respx.get("https://api.github.com/repos/octocat/hello/pulls/1").mock(
+            return_value=Response(
+                200,
+                json={
+                    "state": "open",
+                    "merged": False,
+                    "requested_reviewers": [{"login": "alice"}, {"login": "bob"}],
+                    "requested_teams": [{"slug": "core"}],
+                },
+            )
+        )
+        respx.get("https://api.github.com/repos/octocat/hello/pulls/1/reviews").mock(
+            return_value=Response(200, json=[])
+        )
+
+        info = await gateway.fetch_pr_info(pr_url)
+
+        assert info.requested_reviewers == ("alice", "bob")
+
+    @respx.mock
     async def test_handles_api_error(self, gateway: GitHubGateway, pr_url: PRUrl) -> None:
         _mock_installation_and_token()
         respx.get("https://api.github.com/repos/octocat/hello/pulls/1").mock(

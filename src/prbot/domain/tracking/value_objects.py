@@ -81,3 +81,4 @@ class PRInfo(BaseModel, frozen=True):
     reviews: tuple[Review, ...]
     author_login: str = ""
     ci_failing: bool | None = None
+    requested_reviewers: tuple[str, ...] = ()
