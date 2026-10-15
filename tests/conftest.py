@@ -72,6 +72,16 @@ class FakePRRepository:
             if t.pr_url == pr_url and t.message_ref == message_ref:
                 self.stored[i] = t.with_added_emoji(emoji)
 
+    async def remove_emoji(
+        self,
+        pr_url: PRUrl,
+        message_ref: MessageRef,
+        emoji: str,
+    ) -> None:
+        for i, t in enumerate(self.stored):
+            if t.pr_url == pr_url and t.message_ref == message_ref:
+                self.stored[i] = t.with_removed_emoji(emoji)
+
 
 class FakeCursorRepo:
     def __init__(self) -> None:

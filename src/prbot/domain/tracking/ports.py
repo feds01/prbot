@@ -72,6 +72,13 @@ class PRRepositoryPort(Protocol):
         emoji: str,
     ) -> None: ...
 
+    async def remove_emoji(
+        self,
+        pr_url: PRUrl,
+        message_ref: MessageRef,
+        emoji: str,
+    ) -> None: ...
+
 
 class ChannelCursorPort(Protocol):
     """Port for tracking the last-seen message timestamp per channel."""
