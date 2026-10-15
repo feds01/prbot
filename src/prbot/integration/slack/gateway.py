@@ -138,6 +138,22 @@ class SlackGateway:
         except _MessageGoneError:
             return
 
+    async def remove_reaction(
+        self,
+        message_ref: MessageRef,
+        emoji: str,
+        fallback_emoji: str | None = None,
+    ) -> None:
+        channel, timestamp = decode_ref(message_ref)
+        try:
+            # Mirrors add_reaction: the fallback only lands when the primary didn't.
+            if await self._try_unreact(channel, timestamp, emoji):
+                return
+            if fallback_emoji:
+                await self._try_unreact(channel, timestamp, fallback_emoji)
+        except _MessageGoneError:
+            return
+
     @staticmethod
     def _slack_error_code(message: str) -> SlackErrorCode | None:
         """Extract a known Slack API error code from an exception message, or None."""
@@ -164,6 +180,31 @@ class SlackGateway:
                 case SlackErrorCode.MESSAGE_NOT_FOUND:
                     logger.warning(
                         "Message %s:%s no longer exists, skipping reaction", channel, timestamp
+                    )
+                    raise _MessageGoneError from exc
+                case _:
+                    raise
+        else:
+            return True
+
+    async def _try_unreact(self, channel: str, timestamp: str, emoji: str) -> bool:
+        """Remove a reaction, swallowing benign failures. Returns True if one was removed."""
+        try:
+            await self._client.reactions_remove(
+                channel=channel,
+                timestamp=timestamp,
+                name=self._resolve_emoji_name(emoji),
+            )
+        except Exception as exc:
+            match self._slack_error_code(str(exc)):
+                case SlackErrorCode.NO_REACTION | SlackErrorCode.INVALID_NAME:
+                    logger.debug("No %r reaction to remove on %s:%s", emoji, channel, timestamp)
+                    return False
+                case SlackErrorCode.MESSAGE_NOT_FOUND:
+                    logger.warning(
+                        "Message %s:%s no longer exists, skipping reaction removal",
+                        channel,
+                        timestamp,
                     )
                     raise _MessageGoneError from exc
                 case _:

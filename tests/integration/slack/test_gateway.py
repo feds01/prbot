@@ -88,6 +88,37 @@ class TestSlackGateway:
             channel="C123", timestamp="1234.5678", name="repeat"
         )
 
+    async def test_remove_reaction_calls_api(
+        self, gateway: SlackGateway, mock_client: AsyncMock
+    ) -> None:
+        await gateway.remove_reaction(_msg_ref(), "repeat", "\N{CROSS MARK}")
+
+        # The primary was there, so the fallback is never touched.
+        mock_client.reactions_remove.assert_awaited_once_with(
+            channel="C123", timestamp="1234.5678", name="repeat"
+        )
+
+    async def test_remove_reaction_falls_back_when_primary_absent(
+        self, gateway: SlackGateway, mock_client: AsyncMock
+    ) -> None:
+        mock_client.reactions_remove.side_effect = [Exception("no_reaction"), None]
+
+        await gateway.remove_reaction(_msg_ref(), "re-review", "\N{CROSS MARK}")
+
+        assert [c.kwargs["name"] for c in mock_client.reactions_remove.await_args_list] == [
+            "re-review",
+            "x",
+        ]
+
+    async def test_remove_reaction_ignores_deleted_message(
+        self, gateway: SlackGateway, mock_client: AsyncMock
+    ) -> None:
+        mock_client.reactions_remove.side_effect = Exception("message_not_found")
+
+        await gateway.remove_reaction(_msg_ref(), "repeat", "\N{CROSS MARK}")
+
+        assert mock_client.reactions_remove.await_count == 1
+
     async def test_custom_primary_with_x_fallback(
         self, gateway: SlackGateway, mock_client: AsyncMock
     ) -> None:

@@ -82,11 +82,17 @@ class TestReactionManagerPlan:
 class FakeReactions:
     def __init__(self) -> None:
         self.added: list[tuple[MessageRef, str, str | None]] = []
+        self.removed: list[tuple[MessageRef, str, str | None]] = []
 
     async def add_reaction(
         self, message_ref: MessageRef, emoji: str, fallback_emoji: str | None = None
     ) -> None:
         self.added.append((message_ref, emoji, fallback_emoji))
+
+    async def remove_reaction(
+        self, message_ref: MessageRef, emoji: str, fallback_emoji: str | None = None
+    ) -> None:
+        self.removed.append((message_ref, emoji, fallback_emoji))
 
 
 class TestReactionManagerApply:
@@ -100,3 +106,15 @@ class TestReactionManagerApply:
 
         assert added == ["a", "b"]
         assert fake.added == [(ref, "a", "A"), (ref, "b", None)]
+
+
+class TestReactionManagerRemove:
+    async def test_removes_each_reaction_and_returns_emojis(self) -> None:
+        fake = FakeReactions()
+        manager = ReactionManager(fake)
+        ref = MessageRef(integration_id="slack", ref="C1:1.2")
+
+        removed = await manager.remove(ref, [Reaction("a", "A")])
+
+        assert removed == ["a"]
+        assert fake.removed == [(ref, "a", "A")]

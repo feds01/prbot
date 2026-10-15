@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class Reaction:
-    """A single emoji reaction to add, with an optional fallback."""
+    """A single emoji reaction to add or remove, with an optional fallback."""
 
     emoji: str
     fallback: str | None
@@ -92,3 +92,25 @@ class ReactionManager:
                 break
             added.append(reaction.emoji)
         return added
+
+    async def remove(self, message_ref: MessageRef, reactions: list[Reaction]) -> list[str]:
+        """Remove each planned reaction from the message; return the emojis actually removed.
+
+        Fails per message the same way ``apply`` does.
+        """
+        removed: list[str] = []
+        for reaction in reactions:
+            try:
+                await self._reactions.remove_reaction(
+                    message_ref, reaction.emoji, reaction.fallback
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to remove %r from %s, skipping",
+                    reaction.emoji,
+                    message_ref,
+                    exc_info=True,
+                )
+                break
+            removed.append(reaction.emoji)
+        return removed

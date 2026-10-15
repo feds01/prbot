@@ -31,6 +31,7 @@ class FakeReactions:
     def __init__(self) -> None:
         self.added: list[tuple[MessageRef, str]] = []
         self.added_with_fallback: list[tuple[MessageRef, str, str | None]] = []
+        self.removed: list[tuple[MessageRef, str, str | None]] = []
 
     async def add_reaction(
         self,
@@ -40,6 +41,14 @@ class FakeReactions:
     ) -> None:
         self.added.append((message_ref, emoji))
         self.added_with_fallback.append((message_ref, emoji, fallback_emoji))
+
+    async def remove_reaction(
+        self,
+        message_ref: MessageRef,
+        emoji: str,
+        fallback_emoji: str | None = None,
+    ) -> None:
+        self.removed.append((message_ref, emoji, fallback_emoji))
 
 
 class FakePRRepository:
