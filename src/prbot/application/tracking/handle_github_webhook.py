@@ -6,6 +6,7 @@ from prbot.domain.common.ports import ScopeSettingsPort
 from prbot.domain.emoji.ports import EmojiConfigResolverPort
 from prbot.domain.emoji.value_objects import EmojiConfig
 from prbot.domain.exclusions.ports import UserExclusionPort
+from prbot.domain.tracking.entities import TrackedPR
 from prbot.domain.tracking.ports import (
     PRRepositoryPort,
     PRSourcePort,
@@ -13,7 +14,7 @@ from prbot.domain.tracking.ports import (
     SourceRateLimitError,
 )
 from prbot.domain.tracking.status_resolver import remove_ignored_activity, resolve_pr_status
-from prbot.domain.tracking.value_objects import PRInfo, PRUrl
+from prbot.domain.tracking.value_objects import PRInfo, PRStatus, PRUrl
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ class HandleGitHubWebhook:
         number: int,
         sender: str | None = None,
     ) -> bool:
-        """Re-evaluate PR status and add new reactions to all messages tracking it.
+        """Re-evaluate PR status and update reactions on all messages tracking it.
 
         Returns whether the PR was actually evaluated, so bulk callers can tell
         a genuine pass from a skipped one. Raises ``SourceRateLimitError`` rather
@@ -100,8 +101,22 @@ class HandleGitHubWebhook:
                 )
             config = config_cache[cache_key]
 
-            reactions = self._reactions.plan(config, status, pr_info_without_ignored, tracked)
-            for emoji in await self._reactions.apply(tracked.message_ref, reactions):
-                await self._repo.add_emoji(pr_url, tracked.message_ref, emoji)
+            await self._sync_reactions(tracked, config, status, pr_info_without_ignored)
 
         return True
+
+    async def _sync_reactions(
+        self,
+        tracked: TrackedPR,
+        config: EmojiConfig,
+        status: PRStatus,
+        pr_info: PRInfo,
+    ) -> None:
+        """Add the reactions *tracked* now warrants, take back stale ones, and persist both."""
+        reactions = self._reactions.plan(config, status, pr_info, tracked)
+        for emoji in await self._reactions.apply(tracked.message_ref, reactions):
+            await self._repo.add_emoji(tracked.pr_url, tracked.message_ref, emoji)
+
+        removals = self._reactions.plan_removals(config, pr_info, tracked)
+        for emoji in await self._reactions.remove(tracked.message_ref, removals):
+            await self._repo.remove_emoji(tracked.pr_url, tracked.message_ref, emoji)

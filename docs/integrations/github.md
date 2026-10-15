@@ -43,7 +43,7 @@ Subscribe to these events:
 
 | Event                    | Purpose                                                                   |
 | ------------------------ | ------------------------------------------------------------------------- |
-| **Pull request**         | Notified when PRs are opened, closed, merged, or review is re-requested   |
+| **Pull request**         | Notified when PRs are opened, closed, merged, or review is (un-)requested |
 | **Pull request review**  | Notified when reviews are submitted                                       |
 | **Check suite**          | Notified when CI completes                                                |
 

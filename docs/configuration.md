@@ -93,7 +93,7 @@ The script uploads each image from `emojis/` using the filename (without extensi
 | ![speech_balloon](images/emojis/speech_balloon.png){: style="height:24px"} | `:speech_balloon:` | PRs with only comments |
 | 🪦 | `:headstone:` | Closed PRs (native Unicode, no upload needed) |
 | ❌ | `:ci_failed:` | PRs with failing CI (custom; falls back to `:x:` / ❌ if not uploaded) |
-| 🔁 | `:repeat:` | PRs where review was re-requested from someone who already reviewed (native Unicode, no upload needed) |
+| 🔁 | `:repeat:` | PRs where review was re-requested from someone who already reviewed; removed once they review again, and added back on any later re-request (native Unicode, no upload needed) |
 
 ### Overriding defaults
 

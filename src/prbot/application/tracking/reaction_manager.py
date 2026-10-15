@@ -29,7 +29,9 @@ class ReactionManager:
     - the CI-failure emoji — derived from check-runs, applied *alongside* the
       review emoji when CI is failing;
     - the re-review emoji — applied *alongside* the review emoji when review
-      is re-requested from someone who has already reviewed the PR.
+      is re-requested from someone who has already reviewed the PR, and the
+      only emoji ever taken back: ``plan_removals`` clears it once nobody is
+      waiting to re-review.
 
     ``plan`` is pure and skips any emoji already on the message, and any
     duplicate within the same batch, so applying the result is idempotent.
@@ -70,6 +72,19 @@ class ReactionManager:
             )
 
         return reactions
+
+    @staticmethod
+    def plan_removals(config: EmojiConfig, pr_info: PRInfo, tracked: TrackedPR) -> list[Reaction]:
+        """Compute the reactions to take back now that the PR no longer warrants them."""
+        status = PRStatus.RE_REVIEW_REQUESTED
+        emoji = config.for_status(status)
+        if emoji is None or not tracked.has_emoji(emoji) or resolve_re_review_requested(pr_info):
+            return []
+        # A workspace could map another status to the same name; removing it
+        # would strip that status's reaction too, so leave it in place.
+        if any(config.for_status(other) == emoji for other in PRStatus if other != status):
+            return []
+        return [Reaction(emoji, EmojiConfig.fallback_for_status(status))]
 
     async def apply(self, message_ref: MessageRef, reactions: list[Reaction]) -> list[str]:
         """Add each planned reaction to the message; return the emojis actually added.

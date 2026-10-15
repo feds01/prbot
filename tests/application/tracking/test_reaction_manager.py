@@ -79,6 +79,62 @@ class TestReactionManagerPlan:
         assert ReactionManager.plan(EmojiConfig(), PRStatus.COMMENTED, info, tracked) == []
 
 
+def _re_review_info(requested: tuple[str, ...]) -> PRInfo:
+    return PRInfo(
+        state="open",
+        merged=False,
+        reviews=(Review(user_login="bob", state=ReviewState.APPROVED),),
+        requested_reviewers=requested,
+    )
+
+
+RE_REVIEW_REACTION = Reaction(
+    RE_REVIEW_EMOJI, EmojiConfig.fallback_for_status("re_review_requested")
+)
+
+
+class TestReactionManagerPlanRemovals:
+    def test_removes_re_review_once_nobody_is_waiting(self) -> None:
+        tracked = _tracked(applied=frozenset({RE_REVIEW_EMOJI}))
+        plan = ReactionManager.plan_removals(EmojiConfig(), _re_review_info(()), tracked)
+        assert plan == [RE_REVIEW_REACTION]
+
+    def test_keeps_re_review_while_still_requested(self) -> None:
+        tracked = _tracked(applied=frozenset({RE_REVIEW_EMOJI}))
+        plan = ReactionManager.plan_removals(EmojiConfig(), _re_review_info(("bob",)), tracked)
+        assert plan == []
+
+    def test_keeps_re_review_while_another_reviewer_is_waiting(self) -> None:
+        # bob re-reviewed and left the requested list; carol still hasn't.
+        info = PRInfo(
+            state="open",
+            merged=False,
+            reviews=(
+                Review(user_login="bob", state=ReviewState.APPROVED),
+                Review(user_login="carol", state=ReviewState.CHANGES_REQUESTED),
+            ),
+            requested_reviewers=("carol",),
+        )
+        tracked = _tracked(applied=frozenset({RE_REVIEW_EMOJI}))
+        assert ReactionManager.plan_removals(EmojiConfig(), info, tracked) == []
+
+    def test_removes_re_review_when_only_first_requests_remain(self) -> None:
+        # dave was requested for the first time, so nobody is waiting to *re*-review.
+        tracked = _tracked(applied=frozenset({RE_REVIEW_EMOJI}))
+        plan = ReactionManager.plan_removals(EmojiConfig(), _re_review_info(("dave",)), tracked)
+        assert plan == [RE_REVIEW_REACTION]
+
+    def test_nothing_to_remove_when_not_applied(self) -> None:
+        plan = ReactionManager.plan_removals(EmojiConfig(), _re_review_info(()), _tracked())
+        assert plan == []
+
+    def test_keeps_emoji_shared_with_another_status(self) -> None:
+        # Removing it would also strip the approved reaction it doubles as.
+        config = EmojiConfig(approved="same", re_review_requested="same")
+        tracked = _tracked(applied=frozenset({"same"}))
+        assert ReactionManager.plan_removals(config, _re_review_info(()), tracked) == []
+
+
 class FakeReactions:
     def __init__(self) -> None:
         self.added: list[tuple[MessageRef, str, str | None]] = []
