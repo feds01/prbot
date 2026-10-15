@@ -23,6 +23,14 @@ class TestEmojiConfig:
         config = EmojiConfig(ci_failed="ci-broke")
         assert config.for_status("ci_failed") == "ci-broke"
 
+    def test_re_review_requested_default_with_unicode_fallback(self) -> None:
+        config = EmojiConfig()
+        assert config.for_status("re_review_requested") == "repeat"
+        assert (
+            EmojiConfig.fallback_for_status("re_review_requested")
+            == "\N{CLOCKWISE RIGHTWARDS AND LEFTWARDS OPEN CIRCLE ARROWS}"
+        )
+
     def test_open_returns_none(self) -> None:
         config = EmojiConfig()
         assert config.for_status("open") is None
@@ -34,7 +42,15 @@ class TestEmojiConfig:
         assert config.for_status("closed") == "headstone"  # unchanged default
 
     def test_fallback_returns_unicode_for_known_statuses(self) -> None:
-        statuses = ("merged", "closed", "changes_requested", "approved", "commented", "ci_failed")
+        statuses = (
+            "merged",
+            "closed",
+            "changes_requested",
+            "approved",
+            "commented",
+            "ci_failed",
+            "re_review_requested",
+        )
         for status in statuses:
             fallback = EmojiConfig.fallback_for_status(status)
             assert fallback is not None

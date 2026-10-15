@@ -8,7 +8,7 @@ from prbot.domain.emoji.ports import EmojiConfigResolverPort
 from prbot.domain.exclusions.ports import UserExclusionPort
 from prbot.domain.tracking.entities import TrackedPR
 from prbot.domain.tracking.ports import PRRepositoryPort, PRSourcePort, ReactionPort
-from prbot.domain.tracking.status_resolver import filter_pr_info, resolve_pr_status
+from prbot.domain.tracking.status_resolver import remove_ignored_activity, resolve_pr_status
 from prbot.domain.tracking.value_objects import MessageRef
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ class HandleIncomingMessage:
                     continue
 
                 status = resolve_pr_status(
-                    filter_pr_info(
+                    remove_ignored_activity(
                         pr_info,
                         excluded_logins=excluded_logins,
                         mute_self_review_comments=mute,

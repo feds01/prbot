@@ -12,7 +12,7 @@ from prbot.domain.tracking.ports import (
     ReactionPort,
     SourceRateLimitError,
 )
-from prbot.domain.tracking.status_resolver import filter_pr_info, resolve_pr_status
+from prbot.domain.tracking.status_resolver import remove_ignored_activity, resolve_pr_status
 from prbot.domain.tracking.value_objects import PRStatus, PRUrl
 
 logger = logging.getLogger(__name__)
@@ -87,7 +87,7 @@ class HandleGitHubWebhook:
                 excluded_logins = await self._user_exclusions.excluded_logins(list(cache_key))
                 mute = bool(await self._scope_settings.get(list(cache_key), MUTE_SELF_REVIEWS_KEY))
                 status_cache[cache_key] = resolve_pr_status(
-                    filter_pr_info(
+                    remove_ignored_activity(
                         pr_info,
                         excluded_logins=excluded_logins,
                         mute_self_review_comments=mute,
