@@ -5,6 +5,7 @@ from prbot.application.tracking.ci_emoji import ci_emoji_to_add
 from prbot.domain.emoji.value_objects import EmojiConfig
 from prbot.domain.tracking.entities import TrackedPR
 from prbot.domain.tracking.ports import ReactionPort
+from prbot.domain.tracking.status_resolver import resolve_re_review_requested
 from prbot.domain.tracking.value_objects import MessageRef, PRInfo, PRStatus
 
 logger = logging.getLogger(__name__)
@@ -21,12 +22,14 @@ class Reaction:
 class ReactionManager:
     """Decides which emoji reactions a PR warrants, and applies them idempotently.
 
-    Two independent tracks feed a plan:
+    Three independent tracks feed a plan:
 
     - the review-status emoji — the single, mutually-exclusive outcome of the
       review state (approved / changes-requested / commented / merged / …);
     - the CI-failure emoji — derived from check-runs, applied *alongside* the
-      review emoji when CI is failing.
+      review emoji when CI is failing;
+    - the re-review emoji — applied *alongside* the review emoji when review
+      is re-requested from someone who has already reviewed the PR.
 
     ``plan`` is pure and skips any emoji already on the message, and any
     duplicate within the same batch, so applying the result is idempotent.
@@ -59,6 +62,12 @@ class ReactionManager:
         ci = ci_emoji_to_add(config, pr_info, tracked)
         if ci is not None:
             _want(ci[0], ci[1])
+
+        if resolve_re_review_requested(pr_info):
+            _want(
+                config.for_status(PRStatus.RE_REVIEW_REQUESTED),
+                EmojiConfig.fallback_for_status(PRStatus.RE_REVIEW_REQUESTED),
+            )
 
         return reactions
 

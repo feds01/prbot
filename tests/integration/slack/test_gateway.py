@@ -76,6 +76,18 @@ class TestSlackGateway:
             channel="C123", timestamp="1234.5678", name="x"
         )
 
+    async def test_repeat_arrows_resolve_to_slack_repeat_alias(
+        self, gateway: SlackGateway, mock_client: AsyncMock
+    ) -> None:
+        # 🔁 (the re-review fallback) derives to a long Unicode name; Slack calls it ":repeat:".
+        await gateway.add_reaction(
+            _msg_ref(), "\N{CLOCKWISE RIGHTWARDS AND LEFTWARDS OPEN CIRCLE ARROWS}"
+        )
+
+        mock_client.reactions_add.assert_awaited_once_with(
+            channel="C123", timestamp="1234.5678", name="repeat"
+        )
+
     async def test_custom_primary_with_x_fallback(
         self, gateway: SlackGateway, mock_client: AsyncMock
     ) -> None:

@@ -93,6 +93,7 @@ The script uploads each image from `emojis/` using the filename (without extensi
 | ![speech_balloon](images/emojis/speech_balloon.png){: style="height:24px"} | `:speech_balloon:` | PRs with only comments |
 | 🪦 | `:headstone:` | Closed PRs (native Unicode, no upload needed) |
 | ❌ | `:ci_failed:` | PRs with failing CI (custom; falls back to `:x:` / ❌ if not uploaded) |
+| 🔁 | `:repeat:` | PRs where review was re-requested from someone who already reviewed (native Unicode, no upload needed) |
 
 ### Overriding defaults
 
@@ -106,6 +107,7 @@ Override the default emoji reactions by setting environment variables with the `
 | `PR_BOT_EMOJI__MERGED`              | `git-merged`               |
 | `PR_BOT_EMOJI__CLOSED`              | `headstone`                |
 | `PR_BOT_EMOJI__CI_FAILED`           | `ci_failed`                |
+| `PR_BOT_EMOJI__RE_REVIEW_REQUESTED` | `repeat`                   |
 
 Open PRs with no reviews receive no emoji reaction.
 

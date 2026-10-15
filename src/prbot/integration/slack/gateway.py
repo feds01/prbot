@@ -67,6 +67,7 @@ class ChannelInfo:
 # aliases differ — e.g. ❌ is `:x:`, not `:cross_mark:`.
 _SLACK_NAME_ALIASES: dict[str, str] = {
     "cross_mark": "x",
+    "clockwise_rightwards_and_leftwards_open_circle_arrows": "repeat",
 }
 
 

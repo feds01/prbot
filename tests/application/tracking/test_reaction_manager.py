@@ -1,10 +1,18 @@
 from prbot.application.tracking.reaction_manager import Reaction, ReactionManager
 from prbot.domain.emoji.value_objects import EmojiConfig
 from prbot.domain.tracking.entities import TrackedPR
-from prbot.domain.tracking.value_objects import MessageRef, PRInfo, PRStatus, PRUrl
+from prbot.domain.tracking.value_objects import (
+    MessageRef,
+    PRInfo,
+    PRStatus,
+    PRUrl,
+    Review,
+    ReviewState,
+)
 
 APPROVED_EMOJI = EmojiConfig().approved
 CI_EMOJI = EmojiConfig().ci_failed
+RE_REVIEW_EMOJI = EmojiConfig().re_review_requested
 
 
 def _tracked(applied: frozenset[str] = frozenset()) -> TrackedPR:
@@ -46,6 +54,29 @@ class TestReactionManagerPlan:
         config = EmojiConfig(approved="same", ci_failed="same")
         plan = ReactionManager.plan(config, PRStatus.APPROVED, _pr_info(True), _tracked())
         assert plan == [Reaction("same", EmojiConfig.fallback_for_status("approved"))]
+
+    def test_plans_re_review_alongside_review_status(self) -> None:
+        info = PRInfo(
+            state="open",
+            merged=False,
+            reviews=(Review(user_login="bob", state=ReviewState.APPROVED),),
+            requested_reviewers=("bob",),
+        )
+        plan = ReactionManager.plan(EmojiConfig(), PRStatus.APPROVED, info, _tracked())
+        assert plan == [
+            Reaction(APPROVED_EMOJI, EmojiConfig.fallback_for_status("approved")),
+            Reaction(RE_REVIEW_EMOJI, EmojiConfig.fallback_for_status("re_review_requested")),
+        ]
+
+    def test_skips_re_review_already_on_message(self) -> None:
+        info = PRInfo(
+            state="open",
+            merged=False,
+            reviews=(Review(user_login="bob", state=ReviewState.COMMENTED),),
+            requested_reviewers=("bob",),
+        )
+        tracked = _tracked(applied=frozenset({"speech_balloon", RE_REVIEW_EMOJI}))
+        assert ReactionManager.plan(EmojiConfig(), PRStatus.COMMENTED, info, tracked) == []
 
 
 class FakeReactions:

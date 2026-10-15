@@ -180,7 +180,7 @@ async def _on_pull_request(payload: object) -> None:
         event.repository.full_name,
         event.pull_request.number,
     )
-    if event.action not in ("opened", "closed", "reopened", "synchronize"):
+    if event.action not in ("opened", "closed", "reopened", "synchronize", "review_requested"):
         return
     owner, repo = event.repository.full_name.split("/")
     await handle_github_webhook.execute(

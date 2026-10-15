@@ -16,6 +16,7 @@ from tests.conftest import (
 )
 
 CI_EMOJI = EmojiConfig().ci_failed
+RE_REVIEW_EMOJI = EmojiConfig().re_review_requested
 
 
 def _pr_url() -> PRUrl:
@@ -691,3 +692,73 @@ class TestHandleGitHubWebhook:
         await use_case.execute("o", "r", 1, sender="Cursor")
 
         assert len(reactions.added) == 0
+
+    async def test_webhook_adds_re_review_emoji_when_reviewer_re_requested(
+        self,
+        reactions: FakeReactions,
+        repo: FakePRRepository,
+        resolver: FakeEmojiConfigResolver,
+        exclusions: FakeUserExclusionRepo,
+        scope_settings: FakeScopeSettingsRepo,
+    ) -> None:
+        # bob requested changes, then the author re-requested his review.
+        repo.stored.append(
+            TrackedPR(
+                pr_url=_pr_url(),
+                message_ref=_msg_ref(),
+                applied_emojis=frozenset({"git-changes-requested"}),
+            )
+        )
+        info = PRInfo(
+            state="open",
+            merged=False,
+            reviews=(Review(user_login="bob", state=ReviewState.CHANGES_REQUESTED),),
+            requested_reviewers=("bob",),
+        )
+        source = FakePRSource(info)
+        use_case = HandleGitHubWebhook(
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
+        )
+
+        await use_case.execute("o", "r", 1, sender="author")
+
+        assert reactions.added == [(_msg_ref(), RE_REVIEW_EMOJI)]
+        assert repo.stored[0].has_emoji(RE_REVIEW_EMOJI)
+
+    async def test_webhook_ignores_re_request_of_excluded_reviewer(
+        self,
+        reactions: FakeReactions,
+        repo: FakePRRepository,
+        resolver: FakeEmojiConfigResolver,
+        exclusions: FakeUserExclusionRepo,
+        scope_settings: FakeScopeSettingsRepo,
+    ) -> None:
+        scope_keys = ("slack/T1/C123", "slack/T1", "slack")
+        repo.stored.append(
+            TrackedPR(pr_url=_pr_url(), message_ref=_msg_ref(), scope_keys=scope_keys)
+        )
+        await exclusions.add("slack/T1", "cursor[bot]")
+        info = PRInfo(
+            state="open",
+            merged=False,
+            reviews=(Review(user_login="cursor[bot]", state=ReviewState.COMMENTED),),
+            requested_reviewers=("cursor[bot]",),
+        )
+        source = FakePRSource(info)
+        use_case = HandleGitHubWebhook(
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
+        )
+
+        await use_case.execute("o", "r", 1, sender="author")
+
+        assert reactions.added == []

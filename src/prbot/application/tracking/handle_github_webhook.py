@@ -13,7 +13,7 @@ from prbot.domain.tracking.ports import (
     SourceRateLimitError,
 )
 from prbot.domain.tracking.status_resolver import remove_ignored_activity, resolve_pr_status
-from prbot.domain.tracking.value_objects import PRStatus, PRUrl
+from prbot.domain.tracking.value_objects import PRInfo, PRUrl
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ class HandleGitHubWebhook:
 
         # Cache per scope-chain to avoid repeated DB queries for identical scopes
         config_cache: dict[tuple[str, ...], EmojiConfig] = {}
-        status_cache: dict[tuple[str, ...], PRStatus] = {}
+        filtered_cache: dict[tuple[str, ...], PRInfo] = {}
 
         for tracked in tracked_prs:
             if sender:
@@ -83,17 +83,16 @@ class HandleGitHubWebhook:
                     continue
 
             cache_key = tracked.scope_keys
-            if cache_key not in status_cache:
+            if cache_key not in filtered_cache:
                 excluded_logins = await self._user_exclusions.excluded_logins(list(cache_key))
                 mute = bool(await self._scope_settings.get(list(cache_key), MUTE_SELF_REVIEWS_KEY))
-                status_cache[cache_key] = resolve_pr_status(
-                    remove_ignored_activity(
-                        pr_info,
-                        excluded_logins=excluded_logins,
-                        mute_self_review_comments=mute,
-                    )
+                filtered_cache[cache_key] = remove_ignored_activity(
+                    pr_info,
+                    excluded_logins=excluded_logins,
+                    mute_self_review_comments=mute,
                 )
-            status = status_cache[cache_key]
+            pr_info_without_ignored = filtered_cache[cache_key]
+            status = resolve_pr_status(pr_info_without_ignored)
 
             if cache_key not in config_cache:
                 config_cache[cache_key] = await self._emoji_resolver.resolve(
@@ -101,7 +100,7 @@ class HandleGitHubWebhook:
                 )
             config = config_cache[cache_key]
 
-            reactions = self._reactions.plan(config, status, pr_info, tracked)
+            reactions = self._reactions.plan(config, status, pr_info_without_ignored, tracked)
             for emoji in await self._reactions.apply(tracked.message_ref, reactions):
                 await self._repo.add_emoji(pr_url, tracked.message_ref, emoji)
 
