@@ -61,6 +61,17 @@ def remove_ignored_activity(
     return pr_info.model_copy(update={"reviews": reviews, "requested_reviewers": requested})
 
 
+def resolve_ci_passed(pr_info: PRInfo) -> bool:
+    """Whether an open PR's CI has definitively passed, so a CI-failure emoji is stale.
+
+    Indeterminate CI (``None``) never counts. Nor does a merged or closed PR,
+    where the last CI state is left as it was.
+    """
+    if pr_info.merged or pr_info.state != "open":
+        return False
+    return pr_info.ci_failing is False
+
+
 def resolve_re_review_requested(pr_info: PRInfo) -> bool:
     """Whether an open PR is waiting on a reviewer who has already reviewed it.
 

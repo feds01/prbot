@@ -3,6 +3,7 @@ import pytest
 from prbot.domain.tracking.status_resolver import (
     remove_ignored_activity,
     resolve_ci_failing,
+    resolve_ci_passed,
     resolve_pr_status,
     resolve_re_review_requested,
 )
@@ -162,6 +163,22 @@ def _requested(
     merged: bool = False,
 ) -> PRInfo:
     return PRInfo(state=state, merged=merged, reviews=reviews, requested_reviewers=requested)
+
+
+class TestResolveCiPassed:
+    def test_passed_when_open_and_passing(self) -> None:
+        info = PRInfo(state="open", merged=False, reviews=(), ci_failing=False)
+        assert resolve_ci_passed(info) is True
+
+    @pytest.mark.parametrize("ci_failing", [True, None])
+    def test_not_passed_unless_definitively_passing(self, ci_failing: bool | None) -> None:
+        info = PRInfo(state="open", merged=False, reviews=(), ci_failing=ci_failing)
+        assert resolve_ci_passed(info) is False
+
+    @pytest.mark.parametrize("merged", [True, False])
+    def test_not_passed_once_merged_or_closed(self, merged: bool) -> None:
+        info = PRInfo(state="closed", merged=merged, reviews=(), ci_failing=False)
+        assert resolve_ci_passed(info) is False
 
 
 class TestResolveReReviewRequested:
