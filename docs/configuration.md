@@ -92,7 +92,7 @@ The script uploads each image from `emojis/` using the filename (without extensi
 | ![git-changes-requested](images/emojis/git-changes-requested.png){: style="height:24px"} | `:git-changes-requested:` | PRs with changes requested |
 | ![speech_balloon](images/emojis/speech_balloon.png){: style="height:24px"} | `:speech_balloon:` | PRs with only comments |
 | 🪦 | `:headstone:` | Closed PRs (native Unicode, no upload needed) |
-| ❌ | `:ci_failed:` | PRs with failing CI (custom; falls back to `:x:` / ❌ if not uploaded) |
+| ❌ | `:ci_failed:` | PRs with failing CI (custom; falls back to `:x:` / ❌ if not uploaded); removed once every check on the latest commit passes, or it has none, and added back on any later failure. Cancelled checks don't count as passing. Left in place on merged and closed PRs. It can briefly disappear right after a push, before GitHub has created the new commit's checks |
 | 🔁 | `:repeat:` | PRs where review was re-requested from someone who already reviewed; removed once they review again, and added back on any later re-request (native Unicode, no upload needed) |
 
 ### Overriding defaults
