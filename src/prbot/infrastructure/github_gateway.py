@@ -28,6 +28,10 @@ _PERMISSION_DENIED = "Resource not accessible by integration"
 # GitHub's maximum page size; a short page means we reached the last one.
 _PAGE_SIZE = 100
 
+# How long an owner without the App keeps using a borrowed installation before
+# we look again, so one who installs it afterwards switches over without a restart.
+_BORROW_RECHECK_SECONDS = 5 * 60
+
 logger = logging.getLogger(__name__)
 
 
@@ -59,6 +63,13 @@ def _looks_like_bad_credentials(resp: httpx.Response) -> bool:
     return not _is_rate_limited(resp) and _PERMISSION_DENIED not in resp.text
 
 
+class NoInstallationError(LookupError):
+    """The App has no active installation to borrow a token from for public PRs."""
+
+    def __init__(self) -> None:
+        super().__init__("GitHub App has no installations")
+
+
 class GitHubGateway:
     """Fetches PR data from GitHub REST API using GitHub App installation tokens."""
 
@@ -77,6 +88,10 @@ class GitHubGateway:
         self._token_cache: dict[int, tuple[str, float]] = {}
         # Cache: owner -> installation_id
         self._installation_cache: dict[str, int] = {}
+        # Installation borrowed for public PRs whose owner hasn't installed the App
+        self._borrowed_installation_id: int | None = None
+        # Cache: owner without the App -> when to check again whether they installed it
+        self._borrowing_until: dict[str, float] = {}
 
     def _generate_jwt(self) -> str:
         now = int(time.time())
@@ -90,6 +105,8 @@ class GitHubGateway:
     async def _get_installation_id(self, owner: str) -> int:
         if owner in self._installation_cache:
             return self._installation_cache[owner]
+        if self._borrowing_until.get(owner, 0) > time.time():
+            return await self._get_borrowed_installation_id()
 
         token = self._generate_jwt()
         resp = await self._client.get(
@@ -102,10 +119,40 @@ class GitHubGateway:
                 f"/users/{owner}/installation",
                 headers={"Authorization": f"Bearer {token}"},
             )
+        if resp.status_code == HTTPStatus.NOT_FOUND:
+            # The owner hasn't installed the App. Any installation's token can
+            # still read public repositories, so borrow one rather than skip
+            # the PR; a private repo will then 404 on the PR fetch itself.
+            # Not cached for good: the owner may install the App next.
+            self._borrowing_until[owner] = time.time() + _BORROW_RECHECK_SECONDS
+            return await self._get_borrowed_installation_id()
+
         resp.raise_for_status()
         installation_id = int(resp.json()["id"])
         self._installation_cache[owner] = installation_id
+        self._borrowing_until.pop(owner, None)
         return installation_id
+
+    async def _get_borrowed_installation_id(self) -> int:
+        if self._borrowed_installation_id is not None:
+            return self._borrowed_installation_id
+
+        resp = await self._client.get(
+            "/app/installations",
+            params={"per_page": _PAGE_SIZE},
+            headers={"Authorization": f"Bearer {self._generate_jwt()}"},
+        )
+        resp.raise_for_status()
+        # A suspended installation cannot mint tokens.
+        active = [i for i in resp.json() if not i.get("suspended_at")]
+        if not active:
+            raise NoInstallationError
+        self._borrowed_installation_id = int(active[0]["id"])
+        logger.info(
+            "Borrowing installation %d for owners without the App installed",
+            self._borrowed_installation_id,
+        )
+        return self._borrowed_installation_id
 
     async def _get_token(self, owner: str) -> str:
         installation_id = await self._get_installation_id(owner)
@@ -130,6 +177,8 @@ class GitHubGateway:
     def _invalidate_token(self, owner: str) -> None:
         """Drop the cached token so the next call mints a fresh one."""
         installation_id = self._installation_cache.get(owner)
+        if installation_id is None and owner in self._borrowing_until:
+            installation_id = self._borrowed_installation_id
         if installation_id is not None:
             self._token_cache.pop(installation_id, None)
 
