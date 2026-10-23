@@ -1,3 +1,5 @@
+import pytest
+
 from prbot.application.tracking.reaction_manager import Reaction, ReactionManager
 from prbot.domain.emoji.value_objects import EmojiConfig
 from prbot.domain.tracking.entities import TrackedPR
@@ -91,6 +93,7 @@ def _re_review_info(requested: tuple[str, ...]) -> PRInfo:
 RE_REVIEW_REACTION = Reaction(
     RE_REVIEW_EMOJI, EmojiConfig.fallback_for_status("re_review_requested")
 )
+CI_REACTION = Reaction(CI_EMOJI, EmojiConfig.fallback_for_status("ci_failed"))
 
 
 class TestReactionManagerPlanRemovals:
@@ -133,6 +136,32 @@ class TestReactionManagerPlanRemovals:
         config = EmojiConfig(approved="same", re_review_requested="same")
         tracked = _tracked(applied=frozenset({"same"}))
         assert ReactionManager.plan_removals(config, _re_review_info(()), tracked) == []
+
+    def test_removes_ci_emoji_once_ci_passes(self) -> None:
+        tracked = _tracked(applied=frozenset({CI_EMOJI}))
+        plan = ReactionManager.plan_removals(EmojiConfig(), _pr_info(False), tracked)
+        assert plan == [CI_REACTION]
+
+    @pytest.mark.parametrize("ci_failing", [True, None])
+    def test_keeps_ci_emoji_unless_ci_passes(self, ci_failing: bool | None) -> None:
+        tracked = _tracked(applied=frozenset({CI_EMOJI}))
+        assert ReactionManager.plan_removals(EmojiConfig(), _pr_info(ci_failing), tracked) == []
+
+    def test_keeps_ci_emoji_on_merged_pr(self) -> None:
+        info = PRInfo(state="closed", merged=True, reviews=(), ci_failing=False)
+        tracked = _tracked(applied=frozenset({CI_EMOJI}))
+        assert ReactionManager.plan_removals(EmojiConfig(), info, tracked) == []
+
+    def test_keeps_ci_emoji_shared_with_another_status(self) -> None:
+        config = EmojiConfig(approved="same", ci_failed="same")
+        tracked = _tracked(applied=frozenset({"same"}))
+        assert ReactionManager.plan_removals(config, _pr_info(False), tracked) == []
+
+    def test_removes_ci_and_re_review_emoji_together(self) -> None:
+        info = PRInfo(state="open", merged=False, reviews=(), ci_failing=False)
+        tracked = _tracked(applied=frozenset({CI_EMOJI, RE_REVIEW_EMOJI}))
+        plan = ReactionManager.plan_removals(EmojiConfig(), info, tracked)
+        assert plan == [CI_REACTION, RE_REVIEW_REACTION]
 
 
 class FakeReactions:

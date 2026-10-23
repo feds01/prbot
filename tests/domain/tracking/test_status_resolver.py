@@ -1,6 +1,9 @@
+import pytest
+
 from prbot.domain.tracking.status_resolver import (
     remove_ignored_activity,
     resolve_ci_failing,
+    resolve_ci_passed,
     resolve_pr_status,
     resolve_re_review_requested,
 )
@@ -107,8 +110,13 @@ def _run(status: str, conclusion: str | None) -> CheckRun:
 
 
 class TestResolveCiFailing:
-    def test_no_runs_is_indeterminate(self) -> None:
-        assert resolve_ci_failing(()) is None
+    def test_unfetched_runs_are_indeterminate(self) -> None:
+        # The check-runs couldn't be fetched, so CI state is unknown.
+        assert resolve_ci_failing(None) is None
+
+    def test_no_runs_is_not_failing(self) -> None:
+        # e.g. [skip ci] or paths-ignore — nothing ran, so nothing is failing.
+        assert resolve_ci_failing(()) is False
 
     def test_any_failing_conclusion_is_failing(self) -> None:
         runs = (_run("completed", "success"), _run("completed", "failure"))
@@ -131,6 +139,21 @@ class TestResolveCiFailing:
     def test_action_required_counts_as_failing(self) -> None:
         assert resolve_ci_failing((_run("completed", "action_required"),)) is True
 
+    @pytest.mark.parametrize("conclusion", ["cancelled", "stale"])
+    def test_inconclusive_run_is_indeterminate(self, conclusion: str) -> None:
+        # Completed without a verdict — don't call it a pass.
+        runs = (_run("completed", "success"), _run("completed", conclusion))
+        assert resolve_ci_failing(runs) is None
+
+    @pytest.mark.parametrize("conclusion", ["skipped", "neutral"])
+    def test_skipped_or_neutral_is_not_failing(self, conclusion: str) -> None:
+        runs = (_run("completed", "success"), _run("completed", conclusion))
+        assert resolve_ci_failing(runs) is False
+
+    def test_failure_wins_over_inconclusive(self) -> None:
+        runs = (_run("completed", "cancelled"), _run("completed", "failure"))
+        assert resolve_ci_failing(runs) is True
+
 
 def _requested(
     requested: tuple[str, ...],
@@ -140,6 +163,22 @@ def _requested(
     merged: bool = False,
 ) -> PRInfo:
     return PRInfo(state=state, merged=merged, reviews=reviews, requested_reviewers=requested)
+
+
+class TestResolveCiPassed:
+    def test_passed_when_open_and_passing(self) -> None:
+        info = PRInfo(state="open", merged=False, reviews=(), ci_failing=False)
+        assert resolve_ci_passed(info) is True
+
+    @pytest.mark.parametrize("ci_failing", [True, None])
+    def test_not_passed_unless_definitively_passing(self, ci_failing: bool | None) -> None:
+        info = PRInfo(state="open", merged=False, reviews=(), ci_failing=ci_failing)
+        assert resolve_ci_passed(info) is False
+
+    @pytest.mark.parametrize("merged", [True, False])
+    def test_not_passed_once_merged_or_closed(self, merged: bool) -> None:
+        info = PRInfo(state="closed", merged=merged, reviews=(), ci_failing=False)
+        assert resolve_ci_passed(info) is False
 
 
 class TestResolveReReviewRequested:

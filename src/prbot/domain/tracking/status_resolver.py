@@ -4,20 +4,29 @@ from prbot.domain.tracking.value_objects import CheckRun, PRInfo, PRStatus, Revi
 
 # check-run conclusions that count as a CI failure.
 _FAILING_CI_CONCLUSIONS = frozenset({"failure", "timed_out", "startup_failure", "action_required"})
+# Completed, but CI never actually ran to a verdict — neither a pass nor a failure.
+_INCONCLUSIVE_CI_CONCLUSIONS = frozenset({"cancelled", "stale"})
 
 
-def resolve_ci_failing(check_runs: tuple[CheckRun, ...]) -> bool | None:
+def resolve_ci_failing(check_runs: tuple[CheckRun, ...] | None) -> bool | None:
     """Derive the aggregate CI state for a commit from its check-runs.
 
     Tri-state: ``True`` if any run failed, ``False`` if every run completed with
-    none failing, ``None`` if indeterminate — no runs, or some still running.
+    none failing, ``None`` if indeterminate — the check-runs couldn't be
+    fetched (``check_runs is None``), some are still running, or cancelled or
+    stale. No runs at all counts as passing: nothing is failing (e.g.
+    ``[skip ci]``).
     """
-    if not check_runs:
+    if check_runs is None:
         return None
     if any(run.conclusion in _FAILING_CI_CONCLUSIONS for run in check_runs):
         return True
-    # No failures —> only report a definitive pass once every run has completed.
-    if any(run.status != "completed" for run in check_runs):
+    # No failures —> only report a definitive pass once every run has completed
+    # with a verdict.
+    if any(
+        run.status != "completed" or run.conclusion in _INCONCLUSIVE_CI_CONCLUSIONS
+        for run in check_runs
+    ):
         return None
     return False
 
@@ -50,6 +59,17 @@ def remove_ignored_activity(
     if reviews is pr_info.reviews and requested == pr_info.requested_reviewers:
         return pr_info
     return pr_info.model_copy(update={"reviews": reviews, "requested_reviewers": requested})
+
+
+def resolve_ci_passed(pr_info: PRInfo) -> bool:
+    """Whether an open PR's CI has definitively passed, so a CI-failure emoji is stale.
+
+    Indeterminate CI (``None``) never counts. Nor does a merged or closed PR,
+    where the last CI state is left as it was.
+    """
+    if pr_info.merged or pr_info.state != "open":
+        return False
+    return pr_info.ci_failing is False
 
 
 def resolve_re_review_requested(pr_info: PRInfo) -> bool:

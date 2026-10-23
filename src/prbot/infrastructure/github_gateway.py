@@ -233,16 +233,16 @@ class GitHubGateway:
         self,
         pr_url: PRUrl,
         head_sha: str | None,
-    ) -> tuple[CheckRun, ...]:
+    ) -> tuple[CheckRun, ...] | None:
         """Fetch all check-runs for a commit.
 
         Generic status data only — interpreting what counts as "failing" is the
-        caller's concern (see ``resolve_ci_failing``). Returns an empty tuple when
-        there is no head SHA or the request fails (e.g. the App lacks the
-        *Checks: read* permission); callers treat "no data" as indeterminate.
+        caller's concern (see ``resolve_ci_failing``). Returns None when there is
+        no head SHA or the request fails (e.g. the App lacks the *Checks: read*
+        permission), so "couldn't tell" is never mistaken for "no check-runs".
         """
         if not head_sha:
-            return ()
+            return None
 
         try:
             runs: list[CheckRun] = []
@@ -267,7 +267,7 @@ class GitHubGateway:
             raise
         except Exception:  # CI status is advisory; never fail a sync over it
             logger.exception("Failed to fetch check-runs for %s@%s", pr_url, head_sha[:7])
-            return ()
+            return None
 
         return tuple(runs)
 

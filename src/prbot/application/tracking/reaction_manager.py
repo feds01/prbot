@@ -5,7 +5,7 @@ from prbot.application.tracking.ci_emoji import ci_emoji_to_add
 from prbot.domain.emoji.value_objects import EmojiConfig
 from prbot.domain.tracking.entities import TrackedPR
 from prbot.domain.tracking.ports import ReactionPort
-from prbot.domain.tracking.status_resolver import resolve_re_review_requested
+from prbot.domain.tracking.status_resolver import resolve_ci_passed, resolve_re_review_requested
 from prbot.domain.tracking.value_objects import MessageRef, PRInfo, PRStatus
 
 logger = logging.getLogger(__name__)
@@ -29,9 +29,11 @@ class ReactionManager:
     - the CI-failure emoji — derived from check-runs, applied *alongside* the
       review emoji when CI is failing;
     - the re-review emoji — applied *alongside* the review emoji when review
-      is re-requested from someone who has already reviewed the PR, and the
-      only emoji ever taken back: ``plan_removals`` clears it once nobody is
-      waiting to re-review.
+      is re-requested from someone who has already reviewed the PR.
+
+    The CI-failure and re-review emoji are the only ones ever taken back:
+    ``plan_removals`` clears them once CI passes on an open PR, or once nobody
+    is waiting to re-review, respectively.
 
     ``plan`` is pure and skips any emoji already on the message, and any
     duplicate within the same batch, so applying the result is idempotent.
@@ -76,15 +78,23 @@ class ReactionManager:
     @staticmethod
     def plan_removals(config: EmojiConfig, pr_info: PRInfo, tracked: TrackedPR) -> list[Reaction]:
         """Compute the reactions to take back now that the PR no longer warrants them."""
-        status = PRStatus.RE_REVIEW_REQUESTED
-        emoji = config.for_status(status)
-        if emoji is None or not tracked.has_emoji(emoji) or resolve_re_review_requested(pr_info):
-            return []
-        # A workspace could map another status to the same name; removing it
-        # would strip that status's reaction too, so leave it in place.
-        if any(config.for_status(other) == emoji for other in PRStatus if other != status):
-            return []
-        return [Reaction(emoji, EmojiConfig.fallback_for_status(status))]
+        stale: list[PRStatus] = []
+        if resolve_ci_passed(pr_info):
+            stale.append(PRStatus.CI_FAILED)
+        if not resolve_re_review_requested(pr_info):
+            stale.append(PRStatus.RE_REVIEW_REQUESTED)
+
+        reactions: list[Reaction] = []
+        for status in stale:
+            emoji = config.for_status(status)
+            if emoji is None or not tracked.has_emoji(emoji):
+                continue
+            # A workspace could map another status to the same name; removing it
+            # would strip that status's reaction too, so leave it in place.
+            if any(config.for_status(other) == emoji for other in PRStatus if other != status):
+                continue
+            reactions.append(Reaction(emoji, EmojiConfig.fallback_for_status(status)))
+        return reactions
 
     async def apply(self, message_ref: MessageRef, reactions: list[Reaction]) -> list[str]:
         """Add each planned reaction to the message; return the emojis actually added.
