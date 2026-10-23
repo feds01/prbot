@@ -172,6 +172,18 @@ api = FastAPI(lifespan=lifespan)
 registry.register_all_routes(api)
 
 
+_PULL_REQUEST_ACTIONS = frozenset(
+    {
+        "opened",
+        "closed",
+        "reopened",
+        "synchronize",
+        "review_requested",
+        "review_request_removed",
+    }
+)
+
+
 async def _on_pull_request(payload: object) -> None:
     event = PullRequestEvent.model_validate(payload)
     logger.info(
@@ -180,7 +192,7 @@ async def _on_pull_request(payload: object) -> None:
         event.repository.full_name,
         event.pull_request.number,
     )
-    if event.action not in ("opened", "closed", "reopened", "synchronize"):
+    if event.action not in _PULL_REQUEST_ACTIONS:
         return
     owner, repo = event.repository.full_name.split("/")
     await handle_github_webhook.execute(

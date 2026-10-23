@@ -41,11 +41,11 @@ Under **Permissions & events**, configure:
 
 Subscribe to these events:
 
-| Event                    | Purpose                                      |
-| ------------------------ | -------------------------------------------- |
-| **Pull request**         | Notified when PRs are opened, closed, merged |
-| **Pull request review**  | Notified when reviews are submitted          |
-| **Check suite**          | Notified when CI completes                   |
+| Event                    | Purpose                                                                   |
+| ------------------------ | ------------------------------------------------------------------------- |
+| **Pull request**         | Notified when PRs are opened, closed, merged, or review is (un-)requested |
+| **Pull request review**  | Notified when reviews are submitted                                       |
+| **Check suite**          | Notified when CI completes                                                |
 
 !!! tip "Grant Checks before subscribing to Check suite"
     **Check suite** only becomes tickable once **Checks** is set to Read-only —

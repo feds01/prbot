@@ -22,19 +22,21 @@ def resolve_ci_failing(check_runs: tuple[CheckRun, ...]) -> bool | None:
     return False
 
 
-def filter_pr_info(
+def remove_ignored_activity(
     pr_info: PRInfo,
     *,
     excluded_logins: set[str] | None = None,
     mute_self_review_comments: bool = False,
 ) -> PRInfo:
-    """Drop reviews that should not influence status resolution for a scope.
+    """Drop the reviews and review requests that should not count for a scope.
 
-    - ``excluded_logins``: lowercased set of logins to ignore entirely.
+    - ``excluded_logins``: lowercased set of logins to ignore entirely, both as
+      reviewers and as requested reviewers.
     - ``mute_self_review_comments``: if True, COMMENTED reviews authored by the
       PR author are dropped (mirrors the per-scope ``mute_self_reviews`` flag).
     """
     reviews = pr_info.reviews
+    requested = pr_info.requested_reviewers
     if mute_self_review_comments and pr_info.author_login:
         author = pr_info.author_login.lower()
         reviews = tuple(
@@ -44,9 +46,22 @@ def filter_pr_info(
         )
     if excluded_logins:
         reviews = tuple(r for r in reviews if r.user_login.lower() not in excluded_logins)
-    if reviews is pr_info.reviews:
+        requested = tuple(login for login in requested if login.lower() not in excluded_logins)
+    if reviews is pr_info.reviews and requested == pr_info.requested_reviewers:
         return pr_info
-    return pr_info.model_copy(update={"reviews": reviews})
+    return pr_info.model_copy(update={"reviews": reviews, "requested_reviewers": requested})
+
+
+def resolve_re_review_requested(pr_info: PRInfo) -> bool:
+    """Whether an open PR is waiting on a reviewer who has already reviewed it.
+
+    GitHub drops a reviewer from the requested list once they submit a review,
+    so a requested reviewer with a prior review was re-requested.
+    """
+    if pr_info.merged or pr_info.state != "open":
+        return False
+    reviewed = {r.user_login.lower() for r in pr_info.reviews if r.state != ReviewState.PENDING}
+    return any(login.lower() in reviewed for login in pr_info.requested_reviewers)
 
 
 def _status_from_reviews(reviews: Sequence[Review]) -> PRStatus:

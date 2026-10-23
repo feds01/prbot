@@ -7,9 +7,10 @@ from pydantic import BaseModel
 class PRStatus(StrEnum):
     """Resolved status of a PR.
 
-    Every status except ``CI_FAILED`` is a mutually-exclusive outcome of
-    ``resolve_pr_status`` — one wins per evaluation. ``CI_FAILED`` comes from
-    check-runs, not reviews, so it is applied *alongside* that winner rather
+    Every status except ``CI_FAILED`` and ``RE_REVIEW_REQUESTED`` is a
+    mutually-exclusive outcome of ``resolve_pr_status`` — one wins per
+    evaluation. ``CI_FAILED`` comes from check-runs and ``RE_REVIEW_REQUESTED``
+    from review requests, so each is applied *alongside* that winner rather
     than replacing it.
     """
 
@@ -20,6 +21,7 @@ class PRStatus(StrEnum):
     COMMENTED = "commented"
     OPEN = "open"
     CI_FAILED = "ci_failed"
+    RE_REVIEW_REQUESTED = "re_review_requested"
 
 
 class ReviewState(StrEnum):
@@ -81,3 +83,4 @@ class PRInfo(BaseModel, frozen=True):
     reviews: tuple[Review, ...]
     author_login: str = ""
     ci_failing: bool | None = None
+    requested_reviewers: tuple[str, ...] = ()

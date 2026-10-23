@@ -20,7 +20,7 @@ class WebhookUser(BaseModel):
 
 
 class PullRequestEvent(BaseModel):
-    action: str  # "opened", "closed", "reopened", "synchronize"
+    action: str  # "opened", "closed", "reopened", "synchronize", "review_requested", …
     pull_request: WebhookPullRequest
     repository: WebhookRepository
     sender: WebhookUser

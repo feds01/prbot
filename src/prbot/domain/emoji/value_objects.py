@@ -7,6 +7,7 @@ _UNICODE_FALLBACKS: dict[str, str] = {
     "approved": "\N{WHITE HEAVY CHECK MARK}",
     "commented": "\N{SPEECH BALLOON}",
     "ci_failed": "\N{CROSS MARK}",
+    "re_review_requested": "\N{CLOCKWISE RIGHTWARDS AND LEFTWARDS OPEN CIRCLE ARROWS}",
 }
 
 
@@ -19,6 +20,7 @@ class EmojiConfig(BaseModel):
     approved: str = "git-approved"
     commented: str = "speech_balloon"
     ci_failed: str = "ci_failed"
+    re_review_requested: str = "repeat"
 
     def for_status(self, status: str) -> str | None:
         """Return the emoji name for a PR status, or None for statuses with no reaction."""
@@ -29,6 +31,7 @@ class EmojiConfig(BaseModel):
             "approved": self.approved,
             "commented": self.commented,
             "ci_failed": self.ci_failed,
+            "re_review_requested": self.re_review_requested,
         }
         return mapping.get(status)
 

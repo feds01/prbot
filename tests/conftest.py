@@ -31,6 +31,7 @@ class FakeReactions:
     def __init__(self) -> None:
         self.added: list[tuple[MessageRef, str]] = []
         self.added_with_fallback: list[tuple[MessageRef, str, str | None]] = []
+        self.removed: list[tuple[MessageRef, str, str | None]] = []
 
     async def add_reaction(
         self,
@@ -40,6 +41,14 @@ class FakeReactions:
     ) -> None:
         self.added.append((message_ref, emoji))
         self.added_with_fallback.append((message_ref, emoji, fallback_emoji))
+
+    async def remove_reaction(
+        self,
+        message_ref: MessageRef,
+        emoji: str,
+        fallback_emoji: str | None = None,
+    ) -> None:
+        self.removed.append((message_ref, emoji, fallback_emoji))
 
 
 class FakePRRepository:
@@ -71,6 +80,16 @@ class FakePRRepository:
         for i, t in enumerate(self.stored):
             if t.pr_url == pr_url and t.message_ref == message_ref:
                 self.stored[i] = t.with_added_emoji(emoji)
+
+    async def remove_emoji(
+        self,
+        pr_url: PRUrl,
+        message_ref: MessageRef,
+        emoji: str,
+    ) -> None:
+        for i, t in enumerate(self.stored):
+            if t.pr_url == pr_url and t.message_ref == message_ref:
+                self.stored[i] = t.with_removed_emoji(emoji)
 
 
 class FakeCursorRepo:

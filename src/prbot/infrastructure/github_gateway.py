@@ -226,6 +226,7 @@ class GitHubGateway:
             reviews=tuple(reviews),
             author_login=pr_data.get("user", {}).get("login", ""),
             ci_failing=resolve_ci_failing(check_runs),
+            requested_reviewers=tuple(u["login"] for u in pr_data.get("requested_reviewers") or []),
         )
 
     async def _fetch_check_runs(

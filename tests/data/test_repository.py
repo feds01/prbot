@@ -85,6 +85,14 @@ class TestSQLitePRRepository:
         results = await repository.find_by_pr_url(_pr_url())
         assert results[0].applied_emojis == frozenset({"eyes", "tada"})
 
+    async def test_remove_emoji(self, repository: SQLitePRRepository) -> None:
+        await repository.save(_tracked(emojis=frozenset({"eyes", "repeat"})))
+
+        await repository.remove_emoji(_pr_url(), _msg_ref(), "repeat")
+
+        results = await repository.find_by_pr_url(_pr_url())
+        assert results[0].applied_emojis == frozenset({"eyes"})
+
     async def test_find_returns_empty_for_unknown(self, repository: SQLitePRRepository) -> None:
         results = await repository.find_by_pr_url(_pr_url(999))
         assert len(results) == 0

@@ -8,7 +8,7 @@ from prbot.domain.emoji.ports import EmojiConfigResolverPort
 from prbot.domain.exclusions.ports import UserExclusionPort
 from prbot.domain.tracking.entities import TrackedPR
 from prbot.domain.tracking.ports import PRRepositoryPort, PRSourcePort, ReactionPort
-from prbot.domain.tracking.status_resolver import filter_pr_info, resolve_pr_status
+from prbot.domain.tracking.status_resolver import remove_ignored_activity, resolve_pr_status
 from prbot.domain.tracking.value_objects import MessageRef
 
 logger = logging.getLogger(__name__)
@@ -58,13 +58,12 @@ class HandleIncomingMessage:
                     )
                     continue
 
-                status = resolve_pr_status(
-                    filter_pr_info(
-                        pr_info,
-                        excluded_logins=excluded_logins,
-                        mute_self_review_comments=mute,
-                    )
+                pr_info_without_ignored = remove_ignored_activity(
+                    pr_info,
+                    excluded_logins=excluded_logins,
+                    mute_self_review_comments=mute,
                 )
+                status = resolve_pr_status(pr_info_without_ignored)
 
                 tracked = TrackedPR(
                     pr_url=pr_url,
@@ -72,10 +71,12 @@ class HandleIncomingMessage:
                     scope_keys=resolved_keys,
                 )
 
-                # The review-status emoji and the (independent) CI-failure emoji
-                # are both resolved and applied here; each added emoji is folded
-                # back into the TrackedPR before it is persisted.
-                reactions = self._reactions.plan(emoji_config, status, pr_info, tracked)
+                # The review-status emoji and the (independent) CI-failure and
+                # re-review emoji are all resolved and applied here; each added
+                # emoji is folded back into the TrackedPR before it is persisted.
+                reactions = self._reactions.plan(
+                    emoji_config, status, pr_info_without_ignored, tracked
+                )
                 for emoji in await self._reactions.apply(message_ref, reactions):
                     tracked = tracked.with_added_emoji(emoji)
 

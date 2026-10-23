@@ -1,9 +1,15 @@
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import discord
 
 from prbot.domain.tracking.value_objects import MessageRef
-from prbot.integration.discord.gateway import INTEGRATION_ID, decode_ref, encode_ref, message_text
+from prbot.integration.discord.gateway import (
+    INTEGRATION_ID,
+    DiscordGateway,
+    decode_ref,
+    encode_ref,
+    message_text,
+)
 
 
 class TestEncodeDecodeRef:
@@ -48,3 +54,39 @@ class TestMessageText:
 
     def test_empty_message(self) -> None:
         assert message_text(_message("")) == ""
+
+
+_REPEAT = "\N{CLOCKWISE RIGHTWARDS AND LEFTWARDS OPEN CIRCLE ARROWS}"
+
+
+def _gateway_with_message(guild_emojis: list[MagicMock]) -> tuple[DiscordGateway, MagicMock]:
+    message = MagicMock(spec=discord.Message)
+    message.remove_reaction = AsyncMock()
+    channel = MagicMock(spec=discord.TextChannel)
+    channel.fetch_message = AsyncMock(return_value=message)
+    client = MagicMock(spec=discord.Client)
+    client.get_channel.return_value = channel
+    client.emojis = guild_emojis
+    return DiscordGateway(client), message
+
+
+class TestRemoveReaction:
+    async def test_skips_name_that_is_not_a_guild_emoji(self) -> None:
+        # No custom `repeat` in the guild, so add_reaction landed the 🔁 fallback;
+        # only that is removed — the bare name is never sent to Discord.
+        gateway, message = _gateway_with_message([])
+
+        await gateway.remove_reaction(encode_ref("1", "2"), "repeat", _REPEAT)
+
+        message.remove_reaction.assert_awaited_once()
+        assert message.remove_reaction.await_args.args[0] == _REPEAT
+
+    async def test_clears_both_custom_emoji_and_fallback(self) -> None:
+        custom = MagicMock(spec=discord.Emoji)
+        custom.name = "repeat"
+        gateway, message = _gateway_with_message([custom])
+
+        await gateway.remove_reaction(encode_ref("1", "2"), "repeat", _REPEAT)
+
+        removed = [call.args[0] for call in message.remove_reaction.await_args_list]
+        assert removed == [custom, _REPEAT]

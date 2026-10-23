@@ -22,3 +22,7 @@ class TrackedPR(BaseModel):
     def with_added_emoji(self, emoji: str) -> TrackedPR:
         """Return a new TrackedPR with an emoji added."""
         return self.model_copy(update={"applied_emojis": self.applied_emojis | {emoji}})
+
+    def with_removed_emoji(self, emoji: str) -> TrackedPR:
+        """Return a new TrackedPR with an emoji removed."""
+        return self.model_copy(update={"applied_emojis": self.applied_emojis - {emoji}})

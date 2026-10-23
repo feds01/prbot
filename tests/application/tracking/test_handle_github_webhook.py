@@ -16,6 +16,7 @@ from tests.conftest import (
 )
 
 CI_EMOJI = EmojiConfig().ci_failed
+RE_REVIEW_EMOJI = EmojiConfig().re_review_requested
 
 
 def _pr_url() -> PRUrl:
@@ -691,3 +692,210 @@ class TestHandleGitHubWebhook:
         await use_case.execute("o", "r", 1, sender="Cursor")
 
         assert len(reactions.added) == 0
+
+    async def test_webhook_adds_re_review_emoji_when_reviewer_re_requested(
+        self,
+        reactions: FakeReactions,
+        repo: FakePRRepository,
+        resolver: FakeEmojiConfigResolver,
+        exclusions: FakeUserExclusionRepo,
+        scope_settings: FakeScopeSettingsRepo,
+    ) -> None:
+        # bob requested changes, then the author re-requested his review.
+        repo.stored.append(
+            TrackedPR(
+                pr_url=_pr_url(),
+                message_ref=_msg_ref(),
+                applied_emojis=frozenset({"git-changes-requested"}),
+            )
+        )
+        info = PRInfo(
+            state="open",
+            merged=False,
+            reviews=(Review(user_login="bob", state=ReviewState.CHANGES_REQUESTED),),
+            requested_reviewers=("bob",),
+        )
+        source = FakePRSource(info)
+        use_case = HandleGitHubWebhook(
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
+        )
+
+        await use_case.execute("o", "r", 1, sender="author")
+
+        assert reactions.added == [(_msg_ref(), RE_REVIEW_EMOJI)]
+        assert repo.stored[0].has_emoji(RE_REVIEW_EMOJI)
+
+    async def test_webhook_ignores_re_request_of_excluded_reviewer(
+        self,
+        reactions: FakeReactions,
+        repo: FakePRRepository,
+        resolver: FakeEmojiConfigResolver,
+        exclusions: FakeUserExclusionRepo,
+        scope_settings: FakeScopeSettingsRepo,
+    ) -> None:
+        scope_keys = ("slack/T1/C123", "slack/T1", "slack")
+        repo.stored.append(
+            TrackedPR(pr_url=_pr_url(), message_ref=_msg_ref(), scope_keys=scope_keys)
+        )
+        await exclusions.add("slack/T1", "cursor[bot]")
+        info = PRInfo(
+            state="open",
+            merged=False,
+            reviews=(Review(user_login="cursor[bot]", state=ReviewState.COMMENTED),),
+            requested_reviewers=("cursor[bot]",),
+        )
+        source = FakePRSource(info)
+        use_case = HandleGitHubWebhook(
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
+        )
+
+        await use_case.execute("o", "r", 1, sender="author")
+
+        assert reactions.added == []
+
+    @pytest.mark.parametrize(
+        ("requested", "removed"),
+        [
+            pytest.param((), True, id="reviewer-reviewed-again"),
+            pytest.param(("bob",), False, id="still-waiting"),
+        ],
+    )
+    async def test_webhook_removes_re_review_emoji_once_re_reviewed(
+        self,
+        requested: tuple[str, ...],
+        removed: bool,
+        reactions: FakeReactions,
+        repo: FakePRRepository,
+        resolver: FakeEmojiConfigResolver,
+        exclusions: FakeUserExclusionRepo,
+        scope_settings: FakeScopeSettingsRepo,
+    ) -> None:
+        repo.stored.append(
+            TrackedPR(
+                pr_url=_pr_url(),
+                message_ref=_msg_ref(),
+                applied_emojis=frozenset({"git-changes-requested", RE_REVIEW_EMOJI}),
+            )
+        )
+        # bob requested changes, was re-requested, and has now approved —
+        # which drops him from the requested reviewers.
+        info = PRInfo(
+            state="open",
+            merged=False,
+            reviews=(
+                Review(user_login="bob", state=ReviewState.CHANGES_REQUESTED),
+                Review(user_login="bob", state=ReviewState.APPROVED),
+            ),
+            requested_reviewers=requested,
+        )
+        source = FakePRSource(info)
+        use_case = HandleGitHubWebhook(
+            source=source,
+            reactions=reactions,
+            pr_repository=repo,
+            emoji_resolver=resolver,
+            user_exclusions=exclusions,
+            scope_settings=scope_settings,
+        )
+
+        await use_case.execute("o", "r", 1, sender="bob")
+
+        assert [e for _, e, _ in reactions.removed] == ([RE_REVIEW_EMOJI] if removed else [])
+        assert repo.stored[0].has_emoji(RE_REVIEW_EMOJI) is not removed
+        assert repo.stored[0].has_emoji("git-approved")
+
+    async def test_webhook_keeps_re_review_emoji_until_every_re_reviewer_is_done(
+        self,
+        reactions: FakeReactions,
+        repo: FakePRRepository,
+        resolver: FakeEmojiConfigResolver,
+        exclusions: FakeUserExclusionRepo,
+        scope_settings: FakeScopeSettingsRepo,
+    ) -> None:
+        repo.stored.append(TrackedPR(pr_url=_pr_url(), message_ref=_msg_ref()))
+        first_reviews = (
+            Review(user_login="bob", state=ReviewState.CHANGES_REQUESTED),
+            Review(user_login="carol", state=ReviewState.CHANGES_REQUESTED),
+        )
+
+        async def webhook(*extra: Review, requested: tuple[str, ...]) -> None:
+            info = PRInfo(
+                state="open",
+                merged=False,
+                reviews=first_reviews + extra,
+                requested_reviewers=requested,
+            )
+            use_case = HandleGitHubWebhook(
+                source=FakePRSource(info),
+                reactions=reactions,
+                pr_repository=repo,
+                emoji_resolver=resolver,
+                user_exclusions=exclusions,
+                scope_settings=scope_settings,
+            )
+            await use_case.execute("o", "r", 1, sender="author")
+
+        # Both re-requested.
+        await webhook(requested=("bob", "carol"))
+        assert repo.stored[0].has_emoji(RE_REVIEW_EMOJI)
+
+        # bob re-reviews; carol is still waiting.
+        await webhook(Review(user_login="bob", state=ReviewState.APPROVED), requested=("carol",))
+        assert repo.stored[0].has_emoji(RE_REVIEW_EMOJI)
+        assert reactions.removed == []
+
+        # carol re-reviews too; nobody is waiting.
+        await webhook(
+            Review(user_login="bob", state=ReviewState.APPROVED),
+            Review(user_login="carol", state=ReviewState.APPROVED),
+            requested=(),
+        )
+        assert not repo.stored[0].has_emoji(RE_REVIEW_EMOJI)
+        assert [e for _, e, _ in reactions.removed] == [RE_REVIEW_EMOJI]
+
+    async def test_webhook_re_adds_re_review_emoji_on_later_re_request(
+        self,
+        reactions: FakeReactions,
+        repo: FakePRRepository,
+        resolver: FakeEmojiConfigResolver,
+        exclusions: FakeUserExclusionRepo,
+        scope_settings: FakeScopeSettingsRepo,
+    ) -> None:
+        repo.stored.append(TrackedPR(pr_url=_pr_url(), message_ref=_msg_ref()))
+
+        async def webhook(*reviews: Review, requested: tuple[str, ...]) -> None:
+            info = PRInfo(
+                state="open", merged=False, reviews=reviews, requested_reviewers=requested
+            )
+            use_case = HandleGitHubWebhook(
+                source=FakePRSource(info),
+                reactions=reactions,
+                pr_repository=repo,
+                emoji_resolver=resolver,
+                user_exclusions=exclusions,
+                scope_settings=scope_settings,
+            )
+            await use_case.execute("o", "r", 1, sender="author")
+
+        changes = Review(user_login="bob", state=ReviewState.CHANGES_REQUESTED)
+        approval = Review(user_login="bob", state=ReviewState.APPROVED)
+
+        # Re-requested, re-reviewed, then re-requested again after more pushes.
+        await webhook(changes, requested=("bob",))
+        await webhook(changes, approval, requested=())
+        assert not repo.stored[0].has_emoji(RE_REVIEW_EMOJI)
+        await webhook(changes, approval, requested=("bob",))
+
+        assert repo.stored[0].has_emoji(RE_REVIEW_EMOJI)
+        assert [e for _, e in reactions.added].count(RE_REVIEW_EMOJI) == 2
+        assert [e for _, e, _ in reactions.removed] == [RE_REVIEW_EMOJI]

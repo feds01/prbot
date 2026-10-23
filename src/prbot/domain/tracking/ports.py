@@ -34,7 +34,7 @@ class PRSourcePort(Protocol):
 
 
 class ReactionPort(Protocol):
-    """Port for adding emoji reactions to messages in any messaging platform."""
+    """Port for adding and removing emoji reactions on messages in any messaging platform."""
 
     async def add_reaction(
         self,
@@ -46,6 +46,20 @@ class ReactionPort(Protocol):
 
         If the primary emoji fails (e.g. not present in the target guild or
         workspace), the adapter may retry with `fallback_emoji` when provided.
+        """
+        ...
+
+    async def remove_reaction(
+        self,
+        message_ref: MessageRef,
+        emoji: str,
+        fallback_emoji: str | None = None,
+    ) -> None:
+        """Remove the bot's own reaction from a message.
+
+        `add_reaction` may have landed `fallback_emoji` instead of `emoji`, so
+        the adapter must also clear the fallback when one is given. Removing a
+        reaction that isn't there is not an error.
         """
         ...
 
@@ -66,6 +80,13 @@ class PRRepositoryPort(Protocol):
         ...
 
     async def add_emoji(
+        self,
+        pr_url: PRUrl,
+        message_ref: MessageRef,
+        emoji: str,
+    ) -> None: ...
+
+    async def remove_emoji(
         self,
         pr_url: PRUrl,
         message_ref: MessageRef,

@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.sqlite import insert
@@ -92,6 +92,22 @@ class SQLitePRRepository:
         message_ref: MessageRef,
         emoji: str,
     ) -> None:
+        await self._update_emojis(pr_url, message_ref, lambda current: current | {emoji})
+
+    async def remove_emoji(
+        self,
+        pr_url: PRUrl,
+        message_ref: MessageRef,
+        emoji: str,
+    ) -> None:
+        await self._update_emojis(pr_url, message_ref, lambda current: current - {emoji})
+
+    async def _update_emojis(
+        self,
+        pr_url: PRUrl,
+        message_ref: MessageRef,
+        change: Callable[[frozenset[str]], frozenset[str]],
+    ) -> None:
         async with self._session_factory() as session:
             stmt = select(TrackedPRRow.applied_emojis).where(
                 TrackedPRRow.owner == pr_url.owner,
@@ -105,8 +121,7 @@ class SQLitePRRepository:
             if row is None:
                 return
 
-            current = _deserialize_emojis(row)
-            updated = current | {emoji}
+            updated = change(_deserialize_emojis(row))
 
             update_stmt = (
                 update(TrackedPRRow)

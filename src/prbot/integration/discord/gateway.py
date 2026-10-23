@@ -93,6 +93,39 @@ class DiscordGateway:
                 emoji,
             )
 
+    async def remove_reaction(
+        self,
+        message_ref: MessageRef,
+        emoji: str,
+        fallback_emoji: str | None = None,
+    ) -> None:
+        channel_id, message_id = decode_ref(message_ref)
+        channel = self._client.get_channel(channel_id)
+        if channel is None:
+            channel = await self._client.fetch_channel(channel_id)
+        if not isinstance(channel, discord.abc.Messageable) or self._client.user is None:
+            return
+        try:
+            message = await channel.fetch_message(message_id)
+        except discord.NotFound:
+            logger.warning("Message %d not found in channel %d", message_id, channel_id)
+            return
+
+        # Discord succeeds silently when the reaction isn't there, so there's no
+        # telling which of the pair add_reaction landed — clear both.
+        for candidate in (emoji, fallback_emoji):
+            if candidate is None:
+                continue
+            resolved = self._resolve_emoji(candidate)
+            if isinstance(resolved, str) and resolved.isascii():
+                # Not a guild emoji, so add_reaction can't have landed it either.
+                continue
+            try:
+                await message.remove_reaction(resolved, self._client.user)
+            except discord.HTTPException as exc:
+                if exc.code != self._UNKNOWN_EMOJI:
+                    raise
+
     # Discord JSON error codes: https://discord.com/developers/docs/topics/opcodes-and-status-codes
     _MAX_REACTIONS = 30010
     _UNKNOWN_EMOJI = 10014
