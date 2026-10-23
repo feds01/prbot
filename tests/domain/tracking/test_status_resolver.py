@@ -1,3 +1,5 @@
+import pytest
+
 from prbot.domain.tracking.status_resolver import (
     remove_ignored_activity,
     resolve_ci_failing,
@@ -111,8 +113,9 @@ class TestResolveCiFailing:
         # The check-runs couldn't be fetched, so CI state is unknown.
         assert resolve_ci_failing(None) is None
 
-    def test_no_runs_is_indeterminate(self) -> None:
-        assert resolve_ci_failing(()) is None
+    def test_no_runs_is_not_failing(self) -> None:
+        # e.g. [skip ci] or paths-ignore — nothing ran, so nothing is failing.
+        assert resolve_ci_failing(()) is False
 
     def test_any_failing_conclusion_is_failing(self) -> None:
         runs = (_run("completed", "success"), _run("completed", "failure"))
@@ -134,6 +137,21 @@ class TestResolveCiFailing:
 
     def test_action_required_counts_as_failing(self) -> None:
         assert resolve_ci_failing((_run("completed", "action_required"),)) is True
+
+    @pytest.mark.parametrize("conclusion", ["cancelled", "stale"])
+    def test_inconclusive_run_is_indeterminate(self, conclusion: str) -> None:
+        # Completed without a verdict — don't call it a pass.
+        runs = (_run("completed", "success"), _run("completed", conclusion))
+        assert resolve_ci_failing(runs) is None
+
+    @pytest.mark.parametrize("conclusion", ["skipped", "neutral"])
+    def test_skipped_or_neutral_is_not_failing(self, conclusion: str) -> None:
+        runs = (_run("completed", "success"), _run("completed", conclusion))
+        assert resolve_ci_failing(runs) is False
+
+    def test_failure_wins_over_inconclusive(self) -> None:
+        runs = (_run("completed", "cancelled"), _run("completed", "failure"))
+        assert resolve_ci_failing(runs) is True
 
 
 def _requested(

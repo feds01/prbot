@@ -4,6 +4,8 @@ from prbot.domain.tracking.value_objects import CheckRun, PRInfo, PRStatus, Revi
 
 # check-run conclusions that count as a CI failure.
 _FAILING_CI_CONCLUSIONS = frozenset({"failure", "timed_out", "startup_failure", "action_required"})
+# Completed, but CI never actually ran to a verdict — neither a pass nor a failure.
+_INCONCLUSIVE_CI_CONCLUSIONS = frozenset({"cancelled", "stale"})
 
 
 def resolve_ci_failing(check_runs: tuple[CheckRun, ...] | None) -> bool | None:
@@ -11,16 +13,20 @@ def resolve_ci_failing(check_runs: tuple[CheckRun, ...] | None) -> bool | None:
 
     Tri-state: ``True`` if any run failed, ``False`` if every run completed with
     none failing, ``None`` if indeterminate — the check-runs couldn't be
-    fetched (``check_runs is None``), there are none, or some are still running.
+    fetched (``check_runs is None``), some are still running, or cancelled or
+    stale. No runs at all counts as passing: nothing is failing (e.g.
+    ``[skip ci]``).
     """
     if check_runs is None:
         return None
-    if not check_runs:
-        return None
     if any(run.conclusion in _FAILING_CI_CONCLUSIONS for run in check_runs):
         return True
-    # No failures —> only report a definitive pass once every run has completed.
-    if any(run.status != "completed" for run in check_runs):
+    # No failures —> only report a definitive pass once every run has completed
+    # with a verdict.
+    if any(
+        run.status != "completed" or run.conclusion in _INCONCLUSIVE_CI_CONCLUSIONS
+        for run in check_runs
+    ):
         return None
     return False
 

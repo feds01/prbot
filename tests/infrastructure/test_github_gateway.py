@@ -257,14 +257,14 @@ class TestFetchCiFailing:
         assert info.ci_failing is None
 
     @respx.mock
-    async def test_no_runs_returns_none(self, gateway: GitHubGateway, pr_url: PRUrl) -> None:
+    async def test_no_runs_returns_false(self, gateway: GitHubGateway, pr_url: PRUrl) -> None:
         _mock_installation_and_token()
         _mock_pr_with_head()
         _mock_check_runs("abc123", [])
 
         info = await gateway.fetch_pr_info(pr_url)
 
-        assert info.ci_failing is None
+        assert info.ci_failing is False
 
     @respx.mock
     async def test_permission_error_returns_none(
