@@ -131,5 +131,16 @@ sequenceDiagram
 This means:
 
 - No personal access tokens needed
-- Tokens are scoped to the installed repositories
+- Tokens are scoped to the installed repositories, plus read access to public
+  ones (see below)
 - Tokens auto-expire after 1 hour and are refreshed automatically
+
+### Public PRs outside your installations
+
+A link to a public PR whose owner hasn't installed the App is still tracked.
+prbot borrows a token from one of the App's existing installations, which can
+read any public repository. Two things differ from installed repos:
+
+- GitHub sends no webhooks for these repos, so the emoji is set when the link
+  is posted and refreshed only by [startup reconciliation](../configuration.md#reconciliation-window).
+- Their API calls count against the borrowed installation's hourly budget.

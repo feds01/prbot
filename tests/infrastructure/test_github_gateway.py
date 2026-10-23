@@ -1,4 +1,5 @@
 import time
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
@@ -6,10 +7,11 @@ import respx
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from httpx import Response
+from time_machine import TimeMachineFixture
 
 from prbot.domain.tracking.ports import SourceRateLimitError
 from prbot.domain.tracking.value_objects import PRUrl, ReviewState
-from prbot.infrastructure.github_gateway import GitHubGateway
+from prbot.infrastructure.github_gateway import GitHubGateway, NoInstallationError
 
 _test_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 TEST_PRIVATE_KEY = _test_key.private_bytes(
@@ -170,6 +172,139 @@ class TestGitHubGateway:
 
         with pytest.raises(httpx.HTTPStatusError, match="404"):
             await gateway.fetch_pr_info(pr_url)
+
+
+def _mock_no_installation_for(owner: str) -> None:
+    respx.get(f"https://api.github.com/orgs/{owner}/installation").mock(
+        return_value=Response(404, json={"message": "Not Found"})
+    )
+    respx.get(f"https://api.github.com/users/{owner}/installation").mock(
+        return_value=Response(404, json={"message": "Not Found"})
+    )
+
+
+def _mock_token(installation_id: int, token: str) -> respx.Route:
+    return respx.post(
+        f"https://api.github.com/app/installations/{installation_id}/access_tokens"
+    ).mock(
+        return_value=Response(
+            201,
+            json={
+                "token": token,
+                "expires_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 3600)),
+            },
+        )
+    )
+
+
+def _mock_linux_pr() -> respx.Route:
+    respx.get("https://api.github.com/repos/torvalds/linux/pulls/1/reviews").mock(
+        return_value=Response(200, json=[])
+    )
+    return respx.get("https://api.github.com/repos/torvalds/linux/pulls/1").mock(
+        return_value=Response(200, json={"state": "open", "merged": False})
+    )
+
+
+_LINUX_PR = PRUrl(owner="torvalds", repo="linux", number=1)
+
+
+class TestPublicPRWithoutInstallation:
+    @respx.mock
+    async def test_borrows_another_installation(self, gateway: GitHubGateway) -> None:
+        _mock_no_installation_for("torvalds")
+        installations_route = respx.get("https://api.github.com/app/installations").mock(
+            return_value=Response(200, json=[{"id": 7}])
+        )
+        token_route = _mock_token(7, "ghs_borrowed")
+        pr_route = _mock_linux_pr()
+
+        info = await gateway.fetch_pr_info(_LINUX_PR)
+
+        assert info.state == "open"
+        assert token_route.call_count == 1
+        assert pr_route.calls[0].request.headers["Authorization"] == "Bearer ghs_borrowed"
+
+        # A second uninstalled owner reuses the same borrowed installation.
+        _mock_no_installation_for("rust-lang")
+        respx.get("https://api.github.com/repos/rust-lang/rust/pulls/2").mock(
+            return_value=Response(200, json={"state": "closed", "merged": True})
+        )
+        respx.get("https://api.github.com/repos/rust-lang/rust/pulls/2/reviews").mock(
+            return_value=Response(200, json=[])
+        )
+
+        await gateway.fetch_pr_info(PRUrl(owner="rust-lang", repo="rust", number=2))
+
+        assert installations_route.call_count == 1
+        assert token_route.call_count == 1
+
+    @respx.mock
+    async def test_app_with_no_installations_raises(self, gateway: GitHubGateway) -> None:
+        _mock_no_installation_for("torvalds")
+        respx.get("https://api.github.com/app/installations").mock(
+            return_value=Response(200, json=[])
+        )
+
+        with pytest.raises(NoInstallationError):
+            await gateway.fetch_pr_info(_LINUX_PR)
+
+    @respx.mock
+    async def test_skips_suspended_installations(self, gateway: GitHubGateway) -> None:
+        _mock_no_installation_for("torvalds")
+        respx.get("https://api.github.com/app/installations").mock(
+            return_value=Response(
+                200, json=[{"id": 6, "suspended_at": "2026-01-01T00:00:00Z"}, {"id": 7}]
+            )
+        )
+        token_route = _mock_token(7, "ghs_borrowed")
+        _mock_linux_pr()
+
+        await gateway.fetch_pr_info(_LINUX_PR)
+
+        assert token_route.call_count == 1
+
+    @respx.mock
+    async def test_private_repo_still_404s(self, gateway: GitHubGateway) -> None:
+        _mock_no_installation_for("torvalds")
+        respx.get("https://api.github.com/app/installations").mock(
+            return_value=Response(200, json=[{"id": 7}])
+        )
+        _mock_token(7, "ghs_borrowed")
+        respx.get("https://api.github.com/repos/torvalds/linux/pulls/1").mock(
+            return_value=Response(404, json={"message": "Not Found"})
+        )
+
+        with pytest.raises(httpx.HTTPStatusError, match="404"):
+            await gateway.fetch_pr_info(_LINUX_PR)
+
+    @respx.mock
+    async def test_owner_who_installs_later_switches_over(
+        self, gateway: GitHubGateway, time_machine: TimeMachineFixture
+    ) -> None:
+        time_machine.move_to(datetime.now(UTC))
+        respx.get("https://api.github.com/orgs/torvalds/installation").mock(
+            side_effect=[
+                Response(404, json={"message": "Not Found"}),
+                Response(200, json={"id": 99}),
+            ]
+        )
+        respx.get("https://api.github.com/users/torvalds/installation").mock(
+            return_value=Response(404, json={"message": "Not Found"})
+        )
+        respx.get("https://api.github.com/app/installations").mock(
+            return_value=Response(200, json=[{"id": 7}])
+        )
+        _mock_token(7, "ghs_borrowed")
+        _mock_token(99, "ghs_own")
+        pr_route = _mock_linux_pr()
+
+        await gateway.fetch_pr_info(_LINUX_PR)
+        time_machine.move_to(datetime.now(UTC) + timedelta(minutes=10))
+        await gateway.fetch_pr_info(_LINUX_PR)
+
+        assert pr_route.calls[0].request.headers["Authorization"] == "Bearer ghs_borrowed"
+        assert pr_route.calls[-1].request.headers["Authorization"] == "Bearer ghs_own"
 
 
 def _mock_pr_with_head(sha: str = "abc123") -> None:
