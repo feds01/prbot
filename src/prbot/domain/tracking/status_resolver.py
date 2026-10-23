@@ -6,12 +6,15 @@ from prbot.domain.tracking.value_objects import CheckRun, PRInfo, PRStatus, Revi
 _FAILING_CI_CONCLUSIONS = frozenset({"failure", "timed_out", "startup_failure", "action_required"})
 
 
-def resolve_ci_failing(check_runs: tuple[CheckRun, ...]) -> bool | None:
+def resolve_ci_failing(check_runs: tuple[CheckRun, ...] | None) -> bool | None:
     """Derive the aggregate CI state for a commit from its check-runs.
 
     Tri-state: ``True`` if any run failed, ``False`` if every run completed with
-    none failing, ``None`` if indeterminate — no runs, or some still running.
+    none failing, ``None`` if indeterminate — the check-runs couldn't be
+    fetched (``check_runs is None``), there are none, or some are still running.
     """
+    if check_runs is None:
+        return None
     if not check_runs:
         return None
     if any(run.conclusion in _FAILING_CI_CONCLUSIONS for run in check_runs):

@@ -107,6 +107,10 @@ def _run(status: str, conclusion: str | None) -> CheckRun:
 
 
 class TestResolveCiFailing:
+    def test_unfetched_runs_are_indeterminate(self) -> None:
+        # The check-runs couldn't be fetched, so CI state is unknown.
+        assert resolve_ci_failing(None) is None
+
     def test_no_runs_is_indeterminate(self) -> None:
         assert resolve_ci_failing(()) is None
 
