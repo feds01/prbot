@@ -13,7 +13,7 @@ def _integration() -> SlackIntegration:
             bot_token="xoxb-test",  # noqa: S106
             signing_secret="secret",  # noqa: S106
         ),
-        handle_incoming_message=MagicMock(),
+        route_message=MagicMock(),
         cursor_repo=MagicMock(),
         backfill=MagicMock(),
         command_dispatcher=MagicMock(),

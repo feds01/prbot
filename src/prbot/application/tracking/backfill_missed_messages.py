@@ -2,7 +2,7 @@ import logging
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 
-from prbot.application.tracking.handle_incoming_message import HandleIncomingMessage
+from prbot.application.route_message import MessageHandler
 from prbot.domain.tracking.ports import ChannelCursorPort
 from prbot.domain.tracking.value_objects import MessageRef
 
@@ -44,14 +44,14 @@ class BackfillMissedMessages:
         *,
         integration_id: str,
         cursor_repo: ChannelCursorPort,
-        handle_incoming_message: HandleIncomingMessage,
+        handle_message: MessageHandler,
         build_message_ref: BuildMessageRefFn,
         build_scope_keys: BuildScopeKeysFn,
         seed_cursor: SeedCursorFn,
     ) -> None:
         self._integration_id = integration_id
         self._cursor_repo = cursor_repo
-        self._handle_incoming_message = handle_incoming_message
+        self._handle_message = handle_message
         self._build_message_ref = build_message_ref
         self._build_scope_keys = build_scope_keys
         self._seed_cursor = seed_cursor
@@ -93,7 +93,7 @@ class BackfillMissedMessages:
                 scope_keys = self._build_scope_keys(item.team_id, item.channel_id)
 
                 try:
-                    await self._handle_incoming_message.execute(
+                    await self._handle_message.execute(
                         message_ref=message_ref,
                         text=item.text,
                         scope_keys=scope_keys,

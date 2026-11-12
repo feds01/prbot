@@ -10,11 +10,11 @@ from slack_sdk.web.async_client import AsyncWebClient
 from starlette.responses import Response
 
 from prbot.application.commands import CommandDispatcher
+from prbot.application.route_message import RouteMessage
 from prbot.application.tracking.backfill_missed_messages import (
     BackfillMissedMessages,
     ChannelDescriptor,
 )
-from prbot.application.tracking.handle_incoming_message import HandleIncomingMessage
 from prbot.config import SlackConfig
 from prbot.domain.tracking.ports import ChannelCursorPort, ReactionPort
 from prbot.integration.slack.gateway import INTEGRATION_ID, SlackGateway, encode_ref
@@ -30,13 +30,13 @@ class SlackIntegration:
     def __init__(
         self,
         config: SlackConfig,
-        handle_incoming_message: HandleIncomingMessage,
+        route_message: RouteMessage,
         cursor_repo: ChannelCursorPort,
         backfill: BackfillMissedMessages,
         command_dispatcher: CommandDispatcher,
     ) -> None:
         self._config = config
-        self._handle_incoming_message = handle_incoming_message
+        self._route_message = route_message
         self._cursor_repo = cursor_repo
         self._backfill = backfill
         self._dispatcher = command_dispatcher
@@ -68,7 +68,7 @@ class SlackIntegration:
             message_ref = encode_ref(channel, ts)
             scope_keys = build_scope_keys(team=team, channel=channel)
             logger.info("Found PR URL in message, processing %s", message_ref.ref)
-            await self._handle_incoming_message.execute(
+            await self._route_message.execute(
                 message_ref=message_ref, text=text, scope_keys=scope_keys
             )
 

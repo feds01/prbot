@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException, Request
 from prbot.application.commands import build_default_dispatcher
 from prbot.application.exclusions.manage_self_reviews import ManageSelfReviews
 from prbot.application.exclusions.manage_user_exclusions import ManageUserExclusions
+from prbot.application.route_message import RouteMessage
 from prbot.application.tracking.backfill_missed_messages import BackfillMissedMessages
 from prbot.application.tracking.handle_github_webhook import HandleGitHubWebhook
 from prbot.application.tracking.handle_incoming_message import HandleIncomingMessage
@@ -76,6 +77,7 @@ handle_incoming_message = HandleIncomingMessage(
     user_exclusions=user_exclusion_repo,
     scope_settings=scope_settings_repo,
 )
+route_message = RouteMessage(pr_messages=handle_incoming_message)
 handle_github_webhook = HandleGitHubWebhook(
     source=github_gateway,
     reactions=registry,
@@ -103,14 +105,14 @@ if settings.slack is not None:
     backfill_missed_messages = BackfillMissedMessages(
         integration_id=SLACK_INTEGRATION_ID,
         cursor_repo=cursor_repository,
-        handle_incoming_message=handle_incoming_message,
+        handle_message=route_message,
         build_message_ref=encode_ref,
         build_scope_keys=build_scope_keys,
         seed_cursor=slack_seed_cursor,
     )
     slack_integration = SlackIntegration(
         config=settings.slack,
-        handle_incoming_message=handle_incoming_message,
+        route_message=route_message,
         cursor_repo=cursor_repository,
         backfill=backfill_missed_messages,
         command_dispatcher=command_dispatcher,
@@ -121,7 +123,7 @@ if settings.discord is not None:
     discord_backfill = BackfillMissedMessages(
         integration_id=DISCORD_INTEGRATION_ID,
         cursor_repo=cursor_repository,
-        handle_incoming_message=handle_incoming_message,
+        handle_message=handle_incoming_message,
         build_message_ref=discord_encode_ref,
         build_scope_keys=discord_build_scope_keys,
         seed_cursor=discord_seed_cursor,

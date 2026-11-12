@@ -58,7 +58,7 @@ def _make_backfill(
     return BackfillMissedMessages(
         integration_id="slack",
         cursor_repo=cursor_repo,
-        handle_incoming_message=handle,
+        handle_message=handle,
         build_message_ref=_build_ref,
         build_scope_keys=_build_scope_keys,
         seed_cursor=lambda: f"{time.time():.6f}",
