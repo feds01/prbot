@@ -1,7 +1,6 @@
 import logging
 
-from prbot.application.adr.sync_adr_reactions import SyncAdrReactions
-from prbot.domain.adr.consensus import evaluate_consensus, wanted_emojis
+from prbot.application.adr.update_adr_post import UpdateAdrPost
 from prbot.domain.adr.entities import TrackedADR
 from prbot.domain.adr.ports import AdrRepositoryPort, AdrSourcePort
 from prbot.domain.adr.value_objects import NotionPageId
@@ -24,9 +23,8 @@ class HandleAdrMessage:
         emoji_resolver: EmojiConfigResolverPort,
     ) -> None:
         self._source = source
-        self._sync = SyncAdrReactions(reactions)
+        self._update = UpdateAdrPost(reactions=reactions, emoji_resolver=emoji_resolver)
         self._repo = adr_repository
-        self._emoji_resolver = emoji_resolver
 
     async def execute(
         self,
@@ -51,11 +49,4 @@ class HandleAdrMessage:
             await self._repo.save(tracked)
             return
 
-        config = await self._emoji_resolver.resolve(list(keys))
-        wanted = wanted_emojis(evaluate_consensus(snapshot), config)
-        tracked = await self._sync.execute(tracked, wanted, config)
-        # Record the edit as seen only once the post shows it, so a sync that
-        # stopped early is retried rather than skipped as up to date.
-        if tracked.applied_emojis == {e.emoji for e in wanted}:
-            tracked = tracked.model_copy(update={"last_edited_time": snapshot.last_edited_time})
-        await self._repo.save(tracked)
+        await self._repo.save(await self._update.execute(tracked, snapshot))
