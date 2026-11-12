@@ -36,6 +36,23 @@ class TrackedPRRow(Base):
     )
 
 
+class TrackedADRRow(Base):
+    __tablename__ = "tracked_adrs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    page_id: Mapped[str] = mapped_column(String, nullable=False)
+    integration_id: Mapped[str] = mapped_column(String, nullable=False)
+    message_ref: Mapped[str] = mapped_column(String, nullable=False)
+    applied_emojis: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    scope_keys: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    # ISO 8601, as Notion sends it. Null until the page has been read once.
+    last_edited_time: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[str] = mapped_column(server_default=func.current_timestamp())
+    updated_at: Mapped[str] = mapped_column(server_default=func.current_timestamp())
+
+    __table_args__ = (UniqueConstraint("page_id", "integration_id", "message_ref"),)
+
+
 class ChannelCursorRow(Base):
     __tablename__ = "channel_cursors"
 

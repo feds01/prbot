@@ -1,10 +1,13 @@
 from collections.abc import Callable, Sequence
+from datetime import datetime
 
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from prbot.data.database import ChannelCursorRow, TrackedPRRow
+from prbot.data.database import ChannelCursorRow, TrackedADRRow, TrackedPRRow
+from prbot.domain.adr.entities import TrackedADR
+from prbot.domain.adr.value_objects import NotionPageId
 from prbot.domain.tracking.entities import TrackedPR
 from prbot.domain.tracking.value_objects import MessageRef, PRUrl
 
@@ -136,6 +139,58 @@ class SQLitePRRepository:
             )
             await session.execute(update_stmt)
             await session.commit()
+
+
+class SQLiteAdrRepository:
+    """Concrete adapter: stores tracked ADR review posts in SQLite via SQLAlchemy async."""
+
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self._session_factory = session_factory
+
+    async def save(self, tracked: TrackedADR) -> None:
+        values = {
+            "applied_emojis": _serialize_emojis(tracked.applied_emojis),
+            "scope_keys": _serialize_scope_keys(tracked.scope_keys),
+            "last_edited_time": (
+                tracked.last_edited_time.isoformat() if tracked.last_edited_time else None
+            ),
+        }
+        async with self._session_factory() as session:
+            stmt = (
+                insert(TrackedADRRow)
+                .values(
+                    page_id=str(tracked.page_id),
+                    integration_id=tracked.message_ref.integration_id,
+                    message_ref=tracked.message_ref.ref,
+                    **values,
+                )
+                .on_conflict_do_update(
+                    index_elements=["page_id", "integration_id", "message_ref"],
+                    set_={**values, "updated_at": func.current_timestamp()},
+                )
+            )
+            await session.execute(stmt)
+            await session.commit()
+
+    async def get(self, page_id: NotionPageId, message_ref: MessageRef) -> TrackedADR | None:
+        async with self._session_factory() as session:
+            stmt = select(TrackedADRRow).where(
+                TrackedADRRow.page_id == str(page_id),
+                TrackedADRRow.integration_id == message_ref.integration_id,
+                TrackedADRRow.message_ref == message_ref.ref,
+            )
+            row = (await session.execute(stmt)).scalar_one_or_none()
+        if row is None:
+            return None
+        return TrackedADR(
+            page_id=NotionPageId(value=row.page_id),
+            message_ref=MessageRef(integration_id=row.integration_id, ref=row.message_ref),
+            applied_emojis=_deserialize_emojis(row.applied_emojis),
+            scope_keys=_deserialize_scope_keys(row.scope_keys),
+            last_edited_time=(
+                datetime.fromisoformat(row.last_edited_time) if row.last_edited_time else None
+            ),
+        )
 
 
 class SQLiteChannelCursorRepository:
