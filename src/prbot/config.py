@@ -17,11 +17,18 @@ class DiscordConfig(BaseModel):
     bot_token: str
 
 
+class NotionConfig(BaseModel):
+    """Configuration for reading ADRs from Notion. Without it, ADR review posts are ignored."""
+
+    token: str
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables with PR_BOT_ prefix."""
 
     slack: SlackConfig | None = None
     discord: DiscordConfig | None = None
+    notion: NotionConfig | None = None
     github_app_id: str
     github_private_key: str
     github_webhook_secret: str

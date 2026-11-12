@@ -6,6 +6,7 @@ from http import HTTPStatus
 
 from fastapi import FastAPI, HTTPException, Request
 
+from prbot.application.adr.handle_adr_message import HandleAdrMessage
 from prbot.application.commands import build_default_dispatcher
 from prbot.application.exclusions.manage_self_reviews import ManageSelfReviews
 from prbot.application.exclusions.manage_user_exclusions import ManageUserExclusions
@@ -21,7 +22,11 @@ from prbot.data.database import (
     make_session_factory,
     run_migrations,
 )
-from prbot.data.repository import SQLiteChannelCursorRepository, SQLitePRRepository
+from prbot.data.repository import (
+    SQLiteAdrRepository,
+    SQLiteChannelCursorRepository,
+    SQLitePRRepository,
+)
 from prbot.data.scope_config import ScopeConfigEmojiResolver
 from prbot.data.scope_settings import SQLiteScopeSettingsRepository
 from prbot.data.user_exclusions import SQLiteUserExclusionRepository
@@ -31,6 +36,7 @@ from prbot.infrastructure.github_webhook_models import (
     PullRequestEvent,
     PullRequestReviewEvent,
 )
+from prbot.infrastructure.notion_gateway import NotionGateway
 from prbot.infrastructure.webhook_verification import verify_github_signature
 from prbot.integration import IntegrationRegistry
 from prbot.integration.discord.gateway import INTEGRATION_ID as DISCORD_INTEGRATION_ID
@@ -64,6 +70,8 @@ emoji_resolver = ScopeConfigEmojiResolver(
     default=settings.emoji,
 )
 user_exclusion_repo = SQLiteUserExclusionRepository(settings=scope_settings_repo)
+# ADR review posts are only tracked once a Notion token is set.
+notion_gateway = NotionGateway(token=settings.notion.token) if settings.notion else None
 
 # --- Integration Registry ---
 registry = IntegrationRegistry()
@@ -77,7 +85,17 @@ handle_incoming_message = HandleIncomingMessage(
     user_exclusions=user_exclusion_repo,
     scope_settings=scope_settings_repo,
 )
-route_message = RouteMessage(pr_messages=handle_incoming_message)
+handle_adr_message = (
+    HandleAdrMessage(
+        source=notion_gateway,
+        reactions=registry,
+        adr_repository=SQLiteAdrRepository(session_factory=session_factory),
+        emoji_resolver=emoji_resolver,
+    )
+    if notion_gateway is not None
+    else None
+)
+route_message = RouteMessage(pr_messages=handle_incoming_message, adr_messages=handle_adr_message)
 handle_github_webhook = HandleGitHubWebhook(
     source=github_gateway,
     reactions=registry,
@@ -166,6 +184,8 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     await registry.stop_all()
     await engine.dispose()
     await github_gateway.close()
+    if notion_gateway is not None:
+        await notion_gateway.close()
     logger.info("Shutdown complete")
 
 
