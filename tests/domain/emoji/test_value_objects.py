@@ -31,6 +31,16 @@ class TestEmojiConfig:
             == "\N{CLOCKWISE RIGHTWARDS AND LEFTWARDS OPEN CIRCLE ARROWS}"
         )
 
+    def test_adr_contested_default_with_unicode_fallback(self) -> None:
+        # `boxing_glove` is a built-in Slack name; Discord falls back to the literal 🥊.
+        config = EmojiConfig()
+        assert config.for_status("adr_contested") == "boxing_glove"
+        assert EmojiConfig.fallback_for_status("adr_contested") == "\N{BOXING GLOVE}"
+
+    def test_custom_adr_contested_emoji(self) -> None:
+        config = EmojiConfig(adr_contested="crossed_swords")
+        assert config.for_status("adr_contested") == "crossed_swords"
+
     def test_open_returns_none(self) -> None:
         config = EmojiConfig()
         assert config.for_status("open") is None
@@ -50,6 +60,7 @@ class TestEmojiConfig:
             "commented",
             "ci_failed",
             "re_review_requested",
+            "adr_contested",
         )
         for status in statuses:
             fallback = EmojiConfig.fallback_for_status(status)
