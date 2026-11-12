@@ -1,10 +1,11 @@
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from prbot.data.database import Base
+from prbot.data.database import Base, TrackedADRRow
 from prbot.data.repository import SQLiteAdrRepository
 from prbot.domain.adr.entities import TrackedADR
 from prbot.domain.adr.value_objects import NotionPageId
@@ -17,12 +18,17 @@ _EDITED = datetime(2026, 11, 1, 9, 30, tzinfo=UTC)
 
 
 @pytest.fixture
-async def repository() -> AsyncIterator[SQLiteAdrRepository]:
+async def session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    yield SQLiteAdrRepository(session_factory=async_sessionmaker[AsyncSession](engine))
+    yield async_sessionmaker[AsyncSession](engine)
     await engine.dispose()
+
+
+@pytest.fixture
+def repository(session_factory: async_sessionmaker[AsyncSession]) -> SQLiteAdrRepository:
+    return SQLiteAdrRepository(session_factory=session_factory)
 
 
 def _tracked(**changes: object) -> TrackedADR:
@@ -73,3 +79,53 @@ class TestSQLiteAdrRepository:
         assert mine is not None
         assert mine.applied_emojis == frozenset({"two", "git-approved"})
         assert await repository.get(_OTHER_PAGE, other_message) is None
+
+
+_MONTH_AGO = "2026-09-01 12:00:00"
+
+
+async def _age(session_factory: async_sessionmaker[AsyncSession], ref: MessageRef) -> None:
+    """Make a stored post look last saved two months ago."""
+    async with session_factory() as session:
+        await session.execute(
+            update(TrackedADRRow)
+            .where(TrackedADRRow.message_ref == ref.ref)
+            .values(created_at=_MONTH_AGO, updated_at=_MONTH_AGO)
+        )
+        await session.commit()
+
+
+class TestFindChangedSince:
+    async def test_returns_posts_saved_since_the_cutoff(
+        self,
+        repository: SQLiteAdrRepository,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        old_message = MessageRef(integration_id="slack", ref="C1:900.000001")
+        await repository.save(_tracked())
+        await repository.save(_tracked(message_ref=old_message))
+        await _age(session_factory, old_message)
+
+        found = await repository.find_changed_since(datetime.now(UTC) - timedelta(days=30))
+
+        assert found == [_tracked()]
+
+    async def test_saving_an_old_post_brings_it_back(
+        self,
+        repository: SQLiteAdrRepository,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        await repository.save(_tracked())
+        await _age(session_factory, _REF)
+        await repository.save(_tracked(applied_emojis=frozenset({"three"})))
+
+        found = await repository.find_changed_since(datetime.now(UTC) - timedelta(days=30))
+
+        assert found == [_tracked(applied_emojis=frozenset({"three"}))]
+
+    async def test_compares_in_utc(self, repository: SQLiteAdrRepository) -> None:
+        await repository.save(_tracked())
+        # An hour from now, written in a zone 5 hours behind UTC.
+        later = (datetime.now(UTC) + timedelta(hours=1)).astimezone(timezone(timedelta(hours=-5)))
+
+        assert await repository.find_changed_since(later) == []

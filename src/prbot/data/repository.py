@@ -1,5 +1,5 @@
 from collections.abc import Callable, Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.sqlite import insert
@@ -180,17 +180,18 @@ class SQLiteAdrRepository:
                 TrackedADRRow.message_ref == message_ref.ref,
             )
             row = (await session.execute(stmt)).scalar_one_or_none()
-        if row is None:
-            return None
-        return TrackedADR(
-            page_id=NotionPageId(value=row.page_id),
-            message_ref=MessageRef(integration_id=row.integration_id, ref=row.message_ref),
-            applied_emojis=_deserialize_emojis(row.applied_emojis),
-            scope_keys=_deserialize_scope_keys(row.scope_keys),
-            last_edited_time=(
-                datetime.fromisoformat(row.last_edited_time) if row.last_edited_time else None
-            ),
-        )
+        return None if row is None else _row_to_adr(row)
+
+    async def find_changed_since(self, since: datetime) -> Sequence[TrackedADR]:
+        cutoff = since.astimezone(UTC).strftime(_SQLITE_TIMESTAMP)
+        async with self._session_factory() as session:
+            stmt = (
+                select(TrackedADRRow)
+                .where(TrackedADRRow.updated_at >= cutoff)
+                .order_by(TrackedADRRow.id)
+            )
+            rows = (await session.execute(stmt)).scalars().all()
+        return [_row_to_adr(row) for row in rows]
 
 
 class SQLiteChannelCursorRepository:
@@ -287,6 +288,22 @@ def _deserialize_scope_keys(value: str | None) -> tuple[str, ...]:
     if not value:
         return ()
     return tuple(value.split(","))
+
+
+# How SQLite's CURRENT_TIMESTAMP writes created_at and updated_at, in UTC.
+_SQLITE_TIMESTAMP = "%Y-%m-%d %H:%M:%S"
+
+
+def _row_to_adr(row: TrackedADRRow) -> TrackedADR:
+    return TrackedADR(
+        page_id=NotionPageId(value=row.page_id),
+        message_ref=MessageRef(integration_id=row.integration_id, ref=row.message_ref),
+        applied_emojis=_deserialize_emojis(row.applied_emojis),
+        scope_keys=_deserialize_scope_keys(row.scope_keys),
+        last_edited_time=(
+            datetime.fromisoformat(row.last_edited_time) if row.last_edited_time else None
+        ),
+    )
 
 
 def _row_to_entity(row: TrackedPRRow) -> TrackedPR:

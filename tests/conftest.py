@@ -1,5 +1,6 @@
 import re
 from collections.abc import Sequence
+from datetime import datetime
 
 from prbot.domain.adr.entities import TrackedADR
 from prbot.domain.adr.value_objects import AdrSnapshot, NotionPageId
@@ -235,3 +236,8 @@ class FakeAdrRepository:
 
     async def get(self, page_id: NotionPageId, message_ref: MessageRef) -> TrackedADR | None:
         return self.stored.get((page_id, message_ref))
+
+    async def find_changed_since(self, since: datetime) -> Sequence[TrackedADR]:
+        """Every stored post; the window is the real repository's job."""
+        self.since = since
+        return list(self.stored.values())
