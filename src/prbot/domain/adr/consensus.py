@@ -164,5 +164,22 @@ def wanted_emojis(verdict: ConsensusVerdict, config: EmojiConfig) -> tuple[AdrEm
     return tuple(unique.values())
 
 
+def fallback_for(emoji: str, config: EmojiConfig) -> str | None:
+    """Return the Unicode fallback ``wanted_emojis`` gives *emoji*, if it gives it one.
+
+    Removing a reaction needs this too: the fallback may be what landed.
+    """
+    for name, fallback in _VERSION_EMOJI.values():
+        if name == emoji:
+            return fallback
+    statuses = (
+        (config.adr_contested, "adr_contested"),
+        (config.approved, "approved"),
+        (config.changes_requested, "changes_requested"),
+        (config.commented, "commented"),
+    )
+    return next((_with_fallback(e, key).fallback for e, key in statuses if e == emoji), None)
+
+
 def _with_fallback(emoji: str, key: str) -> AdrEmoji:
     return AdrEmoji(emoji=emoji, fallback=EmojiConfig.fallback_for_status(key))

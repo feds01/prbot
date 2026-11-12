@@ -7,6 +7,7 @@ from prbot.domain.adr.consensus import (
     AdrEmoji,
     ConsensusVerdict,
     evaluate_consensus,
+    fallback_for,
     read_vote,
     wanted_emojis,
 )
@@ -235,3 +236,25 @@ class TestWantedEmojis:
         config = EmojiConfig(approved="thumbsup", commented="thumbsup")
         verdict = ConsensusVerdict(version=1, approved=True, commented=True)
         assert _names(wanted_emojis(verdict, config)) == ["one", "thumbsup"]
+
+
+class TestFallbackFor:
+    config = EmojiConfig(approved="shipit")
+
+    @pytest.mark.parametrize(
+        ("emoji", "fallback"),
+        [
+            ("three", "3\N{VARIATION SELECTOR-16}\N{COMBINING ENCLOSING KEYCAP}"),
+            ("keycap_ten", "\N{KEYCAP TEN}"),
+            ("shipit", "\N{WHITE HEAVY CHECK MARK}"),
+            ("git-changes-requested", "\N{NO ENTRY SIGN}"),
+            ("boxing_glove", "\N{BOXING GLOVE}"),
+            ("speech_balloon", "\N{SPEECH BALLOON}"),
+        ],
+    )
+    def test_matches_what_wanted_emojis_gives(self, emoji: str, fallback: str) -> None:
+        assert fallback_for(emoji, self.config) == fallback
+
+    def test_unknown_emoji_has_none(self) -> None:
+        # The default approved name, no longer configured for this scope.
+        assert fallback_for("git-approved", self.config) is None
