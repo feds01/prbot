@@ -97,7 +97,7 @@ async def _no_sleep(_seconds: float) -> None:
 
 @pytest.fixture
 async def gateway() -> AsyncIterator[NotionGateway]:
-    gateway = NotionGateway("secret_token", sleep=_no_sleep)
+    gateway = NotionGateway("secret_token", sleep=_no_sleep, min_interval=0)
     yield gateway
     await gateway.close()
 
@@ -333,7 +333,7 @@ class TestFetchSnapshot:
         async def sleep(seconds: float) -> None:
             delays.append(seconds)
 
-        gateway = NotionGateway("t", sleep=sleep)
+        gateway = NotionGateway("t", sleep=sleep, min_interval=0)
         respx.get(f"{API}/pages/{PAGE}").mock(
             side_effect=[
                 Response(429, headers={"Retry-After": "2"}),
@@ -355,6 +355,41 @@ class TestFetchSnapshot:
         with pytest.raises(httpx.HTTPStatusError):
             await gateway.fetch_snapshot(PAGE)
         assert route.call_count == 3
+
+    @respx.mock
+    async def test_spaces_requests_out(self) -> None:
+        delays: list[float] = []
+
+        async def sleep(seconds: float) -> None:
+            delays.append(seconds)
+
+        # The clock stands still, so every request after the first waits its turn.
+        gateway = NotionGateway("t", sleep=sleep, clock=lambda: 100.0)
+        mock_page()
+        mock_children(str(PAGE))
+
+        await gateway.fetch_snapshot(PAGE)
+        await gateway.fetch_snapshot(PAGE)
+        await gateway.close()
+
+        assert delays == pytest.approx([1 / 3, 2 / 3, 1.0])
+
+    @respx.mock
+    async def test_does_not_wait_when_requests_are_already_spaced(self) -> None:
+        delays: list[float] = []
+        times = iter([100.0, 101.0])
+
+        async def sleep(seconds: float) -> None:
+            delays.append(seconds)
+
+        gateway = NotionGateway("t", sleep=sleep, clock=lambda: next(times))
+        mock_page()
+        mock_children(str(PAGE))
+
+        await gateway.fetch_snapshot(PAGE)
+        await gateway.close()
+
+        assert delays == []
 
     @respx.mock
     async def test_raises_when_the_page_is_not_shared(self, gateway: NotionGateway) -> None:

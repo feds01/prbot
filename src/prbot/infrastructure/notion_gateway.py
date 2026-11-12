@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import re
+import time
 from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping, Sequence
 from contextlib import aclosing
 from dataclasses import dataclass
@@ -22,7 +23,9 @@ _NOTION_VERSION = "2025-09-03"
 # Notion's maximum page size for block children.
 _PAGE_SIZE = 100
 
-# Notion allows about 3 requests a second and answers 429 with Retry-After.
+# Notion allows an integration an average of 3 requests a second and answers
+# 429 with Retry-After. Requests are spaced to stay under it.
+_MIN_INTERVAL = 1 / 3
 _MAX_ATTEMPTS = 3
 _DEFAULT_RETRY_AFTER = 1.0
 _MAX_RETRY_AFTER = 30.0
@@ -106,6 +109,8 @@ class NotionGateway:
         self,
         token: str,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        clock: Callable[[], float] = time.monotonic,
+        min_interval: float = _MIN_INTERVAL,
     ) -> None:
         self._client = httpx.AsyncClient(
             base_url=_API_URL,
@@ -116,6 +121,11 @@ class NotionGateway:
             timeout=10.0,
         )
         self._sleep = sleep
+        self._clock = clock
+        self._min_interval = min_interval
+        self._next_request_at = 0.0
+        # Shared by every caller: the poller and new review posts use one token.
+        self._pace = asyncio.Lock()
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -184,6 +194,7 @@ class NotionGateway:
     async def _get(self, path: str, params: Mapping[str, str | int] | None = None) -> object:
         attempt = 1
         while True:
+            await self._wait_turn()
             resp = await self._client.get(path, params=params)
             if resp.status_code == HTTPStatus.TOO_MANY_REQUESTS and attempt < _MAX_ATTEMPTS:
                 delay = _retry_after(resp)
@@ -198,6 +209,14 @@ class NotionGateway:
                 )
                 resp.raise_for_status()
             return resp.json()
+
+    async def _wait_turn(self) -> None:
+        """Wait until *min_interval* has passed since the last request started."""
+        async with self._pace:
+            now = self._clock()
+            if (wait := self._next_request_at - now) > 0:
+                await self._sleep(wait)
+            self._next_request_at = max(now, self._next_request_at) + self._min_interval
 
 
 @dataclass(frozen=True)
