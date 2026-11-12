@@ -62,6 +62,7 @@ nav:
       - Slack: integrations/slack.md
       - Discord: integrations/discord.md
       - GitHub: integrations/github.md
+      - Notion (ADR reviews): integrations/notion.md
   - Configuration: configuration.md
   - Commands: commands.md
   - Deployment: deployment.md

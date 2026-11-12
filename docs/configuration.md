@@ -33,6 +33,16 @@ Setting this enables the Discord integration. If omitted, prbot starts without D
 | -------------------------------- | ----------------------------------- |
 | `PR_BOT_DISCORD__BOT_TOKEN`     | Discord bot token                   |
 
+### Notion (optional)
+
+Setting the token turns on ADR review tracking. See [Notion](integrations/notion.md) for what it does and how to set it up.
+
+| Variable                               | Default | Description                                                     |
+| -------------------------------------- | ------- | --------------------------------------------------------------- |
+| `PR_BOT_NOTION__TOKEN`                 |         | Notion internal integration secret                              |
+| `PR_BOT_NOTION__POLL_INTERVAL_SECONDS` | `120`   | How often tracked ADRs are re-read (min. 30)                    |
+| `PR_BOT_NOTION__POLL_WINDOW_DAYS`      | `30`    | Stop following a post once its reactions haven't changed for this long |
+
 !!! info "Nested config"
     The double underscore (`__`) is the nested delimiter. `PR_BOT_SLACK__BOT_TOKEN` maps to `settings.slack.bot_token` and `PR_BOT_DISCORD__BOT_TOKEN` maps to `settings.discord.bot_token` internally.
 
@@ -108,6 +118,7 @@ Override the default emoji reactions by setting environment variables with the `
 | `PR_BOT_EMOJI__CLOSED`              | `headstone`                |
 | `PR_BOT_EMOJI__CI_FAILED`           | `ci_failed`                |
 | `PR_BOT_EMOJI__RE_REVIEW_REQUESTED` | `repeat`                   |
+| `PR_BOT_EMOJI__ADR_CONTESTED`       | `boxing_glove`             |
 
 Open PRs with no reviews receive no emoji reaction.
 
@@ -236,6 +247,9 @@ PR_BOT_SLACK__SIGNING_SECRET=your-slack-signing-secret
 
 # Discord integration (optional — omit to disable)
 PR_BOT_DISCORD__BOT_TOKEN=your-discord-bot-token
+
+# Notion, for ADR review posts (optional — omit to disable)
+PR_BOT_NOTION__TOKEN=your-notion-integration-secret
 
 # Server (optional — defaults shown)
 PR_BOT_HOST=0.0.0.0

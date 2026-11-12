@@ -14,6 +14,7 @@ A bot that watches for GitHub PR URLs in your messages and reacts with emoji ref
 - **Multi-platform** — works with Slack, Discord, and designed to support more integrations
 - **Customisable emoji** — configure which emoji maps to which status, per workspace or channel
 - **Backfill on startup** — catches any PR messages posted while the bot was offline
+- **ADR reviews** — with a Notion token, reacts to `:memo: ADR to review` posts with the ADR's version and review state from its consensus table
 
 ## Documentation
 
