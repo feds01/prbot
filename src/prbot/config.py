@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 
 from prbot.domain.emoji.value_objects import EmojiConfig
@@ -21,6 +21,11 @@ class NotionConfig(BaseModel):
     """Configuration for reading ADRs from Notion. Without it, ADR review posts are ignored."""
 
     token: str
+    # How often tracked ADRs are re-read. Each pass costs a few Notion requests
+    # per ADR followed, and the bot sends at most 3 a second.
+    poll_interval_seconds: int = Field(default=120, ge=30)
+    # A post is followed until its reactions haven't changed for this long.
+    poll_window_days: int = Field(default=30, ge=1)
 
 
 class Settings(BaseSettings):

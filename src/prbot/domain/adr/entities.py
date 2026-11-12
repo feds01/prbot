@@ -11,7 +11,7 @@ class TrackedADR(BaseModel, frozen=True):
 
     - ``applied_emojis``: the reactions the bot has put on the post, by name.
     - ``last_edited_time``: when the ADR page had last been edited as of the
-      last sync, so a page that hasn't changed since can be skipped.
+      last sync that finished, or ``None`` if none has.
     """
 
     page_id: NotionPageId

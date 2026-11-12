@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -7,6 +8,7 @@ from http import HTTPStatus
 from fastapi import FastAPI, HTTPException, Request
 
 from prbot.application.adr.handle_adr_message import HandleAdrMessage
+from prbot.application.adr.refresh_tracked_adrs import RefreshTrackedADRs
 from prbot.application.commands import build_default_dispatcher
 from prbot.application.exclusions.manage_self_reviews import ManageSelfReviews
 from prbot.application.exclusions.manage_user_exclusions import ManageUserExclusions
@@ -72,6 +74,7 @@ emoji_resolver = ScopeConfigEmojiResolver(
 user_exclusion_repo = SQLiteUserExclusionRepository(settings=scope_settings_repo)
 # ADR review posts are only tracked once a Notion token is set.
 notion_gateway = NotionGateway(token=settings.notion.token) if settings.notion else None
+adr_repository = SQLiteAdrRepository(session_factory=session_factory)
 
 # --- Integration Registry ---
 registry = IntegrationRegistry()
@@ -89,10 +92,22 @@ handle_adr_message = (
     HandleAdrMessage(
         source=notion_gateway,
         reactions=registry,
-        adr_repository=SQLiteAdrRepository(session_factory=session_factory),
+        adr_repository=adr_repository,
         emoji_resolver=emoji_resolver,
     )
     if notion_gateway is not None
+    else None
+)
+refresh_tracked_adrs = (
+    RefreshTrackedADRs(
+        source=notion_gateway,
+        adr_repository=adr_repository,
+        reactions=registry,
+        emoji_resolver=emoji_resolver,
+        interval_seconds=settings.notion.poll_interval_seconds,
+        window_days=settings.notion.poll_window_days,
+    )
+    if notion_gateway is not None and settings.notion is not None
     else None
 )
 route_message = RouteMessage(pr_messages=handle_incoming_message, adr_messages=handle_adr_message)
@@ -164,6 +179,12 @@ def _log_reconciliation_result(task: asyncio.Task[None]) -> None:
         logger.error("Reconciliation task failed unexpectedly: %s", exc)
 
 
+def _log_adr_refresh_end(task: asyncio.Task[None]) -> None:
+    # It only ends by being cancelled at shutdown; anything else is a bug.
+    if not task.cancelled() and (exc := task.exception()):
+        logger.error("ADR refresh loop stopped unexpectedly: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     run_migrations(database_url)
@@ -174,7 +195,18 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
         name="startup-reconciliation",
     )
     reconciliation_task.add_done_callback(_log_reconciliation_result)
+    adr_refresh_task: asyncio.Task[None] | None = None
+    if refresh_tracked_adrs is not None:
+        adr_refresh_task = asyncio.create_task(
+            refresh_tracked_adrs.run_forever(),
+            name="adr-refresh",
+        )
+        adr_refresh_task.add_done_callback(_log_adr_refresh_end)
     yield
+    if adr_refresh_task is not None and not adr_refresh_task.done():
+        adr_refresh_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await adr_refresh_task
     if not reconciliation_task.done():
         reconciliation_task.cancel()
         try:
