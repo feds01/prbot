@@ -58,16 +58,16 @@ class SlackIntegration:
             team = str(event.get("team", ""))
             logger.info("Slack message in %s: %s", channel, text[:100])
 
-            # Always advance the cursor, even for non-PR messages
+            # Always advance the cursor, even for messages the bot ignores
             if channel and ts:
                 await self._cursor_repo.upsert_cursor(INTEGRATION_ID, channel, ts)
 
-            if not _PR_URL_REGEX.search(text):
+            if not is_trackable(text, self._route_message):
                 return
 
             message_ref = encode_ref(channel, ts)
             scope_keys = build_scope_keys(team=team, channel=channel)
-            logger.info("Found PR URL in message, processing %s", message_ref.ref)
+            logger.info("Found a PR URL or ADR review in message, processing %s", message_ref.ref)
             await self._route_message.execute(
                 message_ref=message_ref, text=text, scope_keys=scope_keys
             )
@@ -122,6 +122,11 @@ class SlackIntegration:
 
     async def stop(self) -> None:
         pass
+
+
+def is_trackable(text: str, route_message: RouteMessage) -> bool:
+    """Whether *text* links to a PR or is an ADR review post the bot tracks."""
+    return bool(_PR_URL_REGEX.search(text)) or route_message.is_adr_review(text)
 
 
 def build_scope_keys(team: str, channel: str) -> list[str]:

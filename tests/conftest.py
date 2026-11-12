@@ -1,6 +1,8 @@
 import re
 from collections.abc import Sequence
 
+from prbot.domain.adr.entities import TrackedADR
+from prbot.domain.adr.value_objects import AdrSnapshot, NotionPageId
 from prbot.domain.emoji.value_objects import EmojiConfig
 from prbot.domain.exclusions.ports import GitHubUserKind, GitHubUserRef
 from prbot.domain.tracking.entities import TrackedPR
@@ -207,3 +209,29 @@ class FakeGitHubUserLookup:
             msg = "simulated GitHub lookup failure"
             raise RuntimeError(msg)
         return self._refs.get(key_l)
+
+
+class FakeAdrSource:
+    """Serves one snapshot per page; a page without one fails to read."""
+
+    def __init__(self, *snapshots: AdrSnapshot) -> None:
+        self.snapshots = {s.page_id: s for s in snapshots}
+        self.fetched: list[NotionPageId] = []
+
+    async def fetch_snapshot(self, page_id: NotionPageId) -> AdrSnapshot:
+        self.fetched.append(page_id)
+        if page_id not in self.snapshots:
+            msg = f"no access to {page_id}"
+            raise RuntimeError(msg)
+        return self.snapshots[page_id]
+
+
+class FakeAdrRepository:
+    def __init__(self, *tracked: TrackedADR) -> None:
+        self.stored = {(t.page_id, t.message_ref): t for t in tracked}
+
+    async def save(self, tracked: TrackedADR) -> None:
+        self.stored[tracked.page_id, tracked.message_ref] = tracked
+
+    async def get(self, page_id: NotionPageId, message_ref: MessageRef) -> TrackedADR | None:
+        return self.stored.get((page_id, message_ref))
